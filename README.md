@@ -2,6 +2,20 @@
 
 This template should help get you started developing with Svelte and TypeScript in Vite.
 
+## Tailwind CSS and shadcn-svelte
+
+Tailwind CSS 4 is configured through the Vite plugin. The styles and
+shadcn-svelte theme are in `src/app.css`, with the `$lib` alias pointing to `src/lib`.
+The counter uses the `Button` component.
+
+To add a component:
+
+```sh
+pnpm exec shadcn-svelte add dialog
+```
+
+To validate the project, run `pnpm check` and `pnpm build`.
+
 ## Recommended IDE Setup
 
 [VS Code](https://code.visualstudio.com/) + [Svelte](https://marketplace.visualstudio.com/items?itemName=svelte.svelte-vscode).
