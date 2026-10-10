@@ -13,7 +13,7 @@
   </div>
   <div>
     <h1>Get started</h1>
-    <p class="text-">Edit <code>src/App.svelte</code> and save to test <code>HMR</code></p>
+    <p>Edit <code>src/App.svelte</code> and save to test <code>HMR</code></p>
   </div>
   <Counter />
 </section>
