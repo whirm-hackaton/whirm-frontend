@@ -25,17 +25,17 @@ cp .env.example .env
 pnpm dev
 ```
 
-`BACKEND_URL` in `.env` sets the URL called directly for `/auth/*` and `/wallets` (required; no default). `src/lib/env.ts` uses `envsafe` to validate required public environment variables and throws when they are missing or invalid. The browser sends the frontend origin; the backend must allow it in `CORS_ORIGINS`. Restart Vite after changes and rebuild for production. This URL is public.
+`BACKEND_URL` in `.env` sets the URL called directly for `/auth/*` and `/wallet` (required; no default). `src/lib/env.ts` uses `envsafe` to validate required public environment variables and throws when they are missing or invalid. The browser sends the frontend origin; the backend must allow it in `CORS_ORIGINS`. Restart Vite after changes and rebuild for production. This URL is public.
 
 ## API
 
 [OpenAPI documentation](http://localhost:3000/ui)
 
-| Action | Endpoint | Result |
-| --- | --- | --- |
-| Sign in | `POST /auth/login` with `{ email, password }` | `200`: user; `401`: refused |
-| Restore session | `GET /auth/me` | `200`: user; `401`: missing or expired session |
-| Sign out | `POST /auth/logout` | `204`: session revoked, cookie cleared |
+| Action          | Endpoint                                      | Result                                         |
+|-----------------|-----------------------------------------------|------------------------------------------------|
+| Sign in         | `POST /auth/login` with `{ email, password }` | `200`: user; `401`: refused                    |
+| Restore session | `GET /auth/me`                                | `200`: user; `401`: missing or expired session |
+| Sign out        | `POST /auth/logout`                           | `204`: session revoked, cookie cleared         |
 
 The user is returned as `{ user: { id, email, displayName } }`.
 

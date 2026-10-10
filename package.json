@@ -27,6 +27,8 @@
     "vite": "^8.3.0"
   },
   "dependencies": {
-    "envsafe": "^2.0.3"
+    "@noble/curves": "1.9.1",
+    "envsafe": "^2.0.3",
+    "viem": "2.38.5"
   }
 }

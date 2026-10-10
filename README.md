@@ -1,6 +1,6 @@
 # Whirm Frontend
 
-Web frontend for Whirm: login, logout and session handling connected to the backend through a session cookie, with candidate wallet registration and persisted metadata from the common API.
+Web frontend for Whirm: login, logout and session handling connected to the backend through a session cookie, with a Bitwarden passkey setup journey and Coinbase Smart Account preparation on Base Sepolia. Passkey settings stay on the client; the API registers only the address and chain as an unverified candidate.
 
 Built with **Svelte 5**, **TypeScript**, **Vite**, **Tailwind CSS 4** and **shadcn-svelte**.
 
@@ -18,7 +18,7 @@ cp .env.example .env
 pnpm dev
 ```
 
-Set `BACKEND_URL` in `.env` to the backend URL (required; no default), then open [localhost:5173](http://localhost:5173). Auth and wallet requests go directly to that URL, with session cookies. Restart Vite after changing `.env`; rebuild for production. The backend URL is public in the browser bundle.
+Configure the public backend, wallet origin, RP ID and Base Sepolia RPC values shown in `.env.example` (required; no defaults), then open [localhost:5173](http://localhost:5173). Auth and wallet requests go directly to that URL, with session cookies. Restart Vite after changing `.env`; rebuild for production. The backend URL is public in the browser bundle.
 
 For local test accounts, run the backend migrations and seeder as described in [Authentication](docs/auth.md).
 
@@ -38,7 +38,7 @@ For local test accounts, run the backend migrations and seeder as described in [
 src/App.svelte          Application entry component
 src/lib/env.ts         Public environment parser and validation
 src/lib/auth/          Authentication UI, client and tests
-src/lib/wallet/        Wallet metadata UI, API client and tests
+src/lib/wallet/        Passkey wallet UI, adapter, API client and tests
 src/lib/components/ui/ Shared UI components
 src/app.css            Global styles and theme
 docs/                  Detailed documentation
@@ -48,6 +48,6 @@ docs/                  Detailed documentation
 
 [Authentication](docs/auth.md) covers backend setup, session handling, tests and deployment requirements. For production, set `BACKEND_URL` before building, use HTTPS for both services, and keep them on the same site for SameSite=Lax cookies. Allow the frontend origin in backend `CORS_ORIGINS`.
 
-[Wallet metadata](docs/wallet.md) covers candidate registration, persisted metadata, cancellation and errors. No real wallet is deployed and no keys are generated.
+[Passkey wallets](docs/wallet.md) covers vault preparation, deterministic account settings, the address-only API contract, retries and validation limits. The passkey is created in the selected provider; no account is deployed by this flow.
 
 [API integration](docs/integration.md) provides the common launch procedure, cookie/CORS configuration, validation results and comparison with the assigned Kaneo tickets.

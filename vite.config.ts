@@ -4,11 +4,12 @@ import tailwindcss from '@tailwindcss/vite'
 import { fileURLToPath, URL } from 'node:url'
 
 export default defineConfig(({ mode }) => {
-  const env = loadEnv(mode, process.cwd(), 'BACKEND_URL')
+  const env = loadEnv(mode, process.cwd(), ['BACKEND_URL', 'WALLET_', 'BASE_SEPOLIA_RPC_URL'])
 
   return {
     define: {
-      'import.meta.env.BACKEND_URL': JSON.stringify(env.BACKEND_URL) ?? 'undefined',
+      ...Object.fromEntries(['BACKEND_URL', 'WALLET_ORIGIN', 'WALLET_RP_ID', 'BASE_SEPOLIA_RPC_URL']
+        .map((key) => [`import.meta.env.${key}`, JSON.stringify(env[key]) ?? 'undefined'])),
     },
     plugins: [tailwindcss(), svelte()],
     server: {

@@ -45,7 +45,7 @@
 </script>
 
 <svelte:head>
-  <title>{session && children ? 'Whirm · Wallet metadata' : 'Whirm · Sign in'}</title>
+  <title>{session && children ? 'Whirm · Passkey wallet' : 'Whirm · Sign in'}</title>
 </svelte:head>
 
 <main lang="en" class="mx-auto flex min-h-svh w-full max-w-5xl flex-col px-5 py-8 sm:px-10 sm:py-12">

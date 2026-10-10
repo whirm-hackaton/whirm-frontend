@@ -6,7 +6,7 @@ import { parseEnv } from './env.js'
 
 test('parses a required backend URL without changing its value', () => {
   const BACKEND_URL = 'https://api.example.test/base/'
-  assert.equal(parseEnv({ BACKEND_URL }).BACKEND_URL, BACKEND_URL)
+  assert.equal(parseEnv({ BACKEND_URL, WALLET_ORIGIN: 'http://localhost:5173', WALLET_RP_ID: 'localhost', BASE_SEPOLIA_RPC_URL: 'https://sepolia.base.org' }).BACKEND_URL, BACKEND_URL)
 })
 
 test('throws when the backend URL is missing, empty or invalid', (context) => {
