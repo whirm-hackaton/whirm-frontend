@@ -1,61 +1,51 @@
-# Svelte + TS + Vite
+# Whirm Frontend
 
-This template should help get you started developing with Svelte and TypeScript in Vite.
+Web frontend for Whirm: login, logout and session handling connected to the backend through a session cookie, with candidate wallet registration and persisted metadata from the common API.
 
-## Tailwind CSS and shadcn-svelte
+Built with **Svelte 5**, **TypeScript**, **Vite**, **Tailwind CSS 4** and **shadcn-svelte**.
 
-Tailwind CSS 4 is configured through the Vite plugin. The styles and
-shadcn-svelte theme are in `src/app.css`, with the `$lib` alias pointing to `src/lib`.
-The counter uses the `Button` component.
+## Getting started
 
-To add a component:
+- Node.js 24 and pnpm.
+- Backend running at `http://localhost:3000`, with its database ready.
+- Backend `CORS_ORIGINS` allowing `http://localhost:5173`.
+
+### Quick start
 
 ```sh
-pnpm exec shadcn-svelte add dialog
+pnpm install --frozen-lockfile
+pnpm dev
 ```
 
-To validate the project, run `pnpm check` and `pnpm build`.
+Open [localhost:5173](http://localhost:5173). Vite forwards `/auth` and `/wallets` requests to the backend.
 
-## Recommended IDE Setup
+For local test accounts, run the backend migrations and seeder as described in [Authentication](docs/auth.md).
 
-[VS Code](https://code.visualstudio.com/) + [Svelte](https://marketplace.visualstudio.com/items?itemName=svelte.svelte-vscode).
+## Commands
 
-## Need an official Svelte framework?
+| Command                          | Purpose                                |
+|----------------------------------|----------------------------------------|
+| `pnpm install --frozen-lockfile` | Install dependencies from the lockfile |
+| `pnpm dev`                       | Start the development server           |
+| `pnpm check`                     | Check Svelte and TypeScript            |
+| `pnpm build`                     | Build for production into `dist/`      |
+| `pnpm preview`                   | Preview the production build locally   |
 
-Check out [SvelteKit](https://github.com/sveltejs/kit#readme), which is also powered by Vite. Deploy anywhere with its serverless-first approach and adapt to various platforms, with out of the box support for TypeScript, SCSS, and Less, and easily-added support for mdsvex, GraphQL, PostCSS, Tailwind CSS, and more.
+## Project structure
 
-## Technical considerations
-
-**Why use this over SvelteKit?**
-
-- It brings its own routing solution which might not be preferable for some users.
-- It is first and foremost a framework that just happens to use Vite under the hood, not a Vite app.
-
-This template contains as little as possible to get started with Vite + TypeScript + Svelte, while taking into account the developer experience with regards to HMR and intellisense. It demonstrates capabilities on par with the other `create-vite` templates and is a good starting point for beginners dipping their toes into a Vite + Svelte project.
-
-Should you later need the extended capabilities and extensibility provided by SvelteKit, the template has been structured similarly to SvelteKit so that it is easy to migrate.
-
-**Why `global.d.ts` instead of `compilerOptions.types` inside `jsconfig.json` or `tsconfig.json`?**
-
-Setting `compilerOptions.types` shuts out all other types not explicitly listed in the configuration. Using triple-slash references keeps the default TypeScript setting of accepting type information from the entire workspace, while also adding `svelte` and `vite/client` type information.
-
-**Why include `.vscode/extensions.json`?**
-
-Other templates indirectly recommend extensions via the README, but this file allows VS Code to prompt the user to install the recommended extension upon opening the project.
-
-**Why enable `allowJs` in the TS template?**
-
-While `allowJs: false` would indeed prevent the use of `.js` files in the project, it does not prevent the use of JavaScript syntax in `.svelte` files. In addition, it would force `checkJs: false`, bringing the worst of both worlds: not being able to guarantee the entire codebase is TypeScript, and also having worse typechecking for the existing JavaScript. In addition, there are valid use cases in which a mixed codebase may be relevant.
-
-**Why is HMR not preserving my local component state?**
-
-HMR state preservation comes with a number of gotchas! It has been disabled by default in both `svelte-hmr` and `@sveltejs/vite-plugin-svelte` due to its often surprising behavior. You can read the details [here](https://github.com/rixo/svelte-hmr#svelte-hmr).
-
-If you have state that's important to retain within a component, consider creating an external store which would not be replaced by HMR.
-
-```ts
-// store.ts
-// An extremely simple external store
-import { writable } from 'svelte/store'
-export default writable(0)
+```text
+src/App.svelte          Application entry component
+src/lib/auth/          Authentication UI, client and tests
+src/lib/wallet/        Wallet metadata UI, API client and tests
+src/lib/components/ui/ Shared UI components
+src/app.css            Global styles and theme
+docs/                  Detailed documentation
 ```
+
+## Documentation
+
+[Authentication](docs/auth.md) covers backend setup, session handling, tests and deployment requirements. Production hosting must route `/auth` and `/wallets` to the backend on the frontend's origin over HTTPS.
+
+[Wallet metadata](docs/wallet.md) covers candidate registration, persisted metadata, cancellation and errors. No real wallet is deployed and no keys are generated.
+
+[API integration](docs/integration.md) provides the common launch procedure, cookie/CORS configuration, validation results and comparison with the assigned Kaneo tickets.
