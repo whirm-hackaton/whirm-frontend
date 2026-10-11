@@ -3,10 +3,12 @@
   import { Button } from '$lib/components/ui/button'
   import { createWallet } from './wallet'
   import Transfer from './Transfer.svelte'
+  import VaultSetup from '../vault/VaultSetup.svelte'
 
   let { userId, onSessionExpired }: { userId: string; onSessionExpired: () => void } = $props()
   const wallet = untrack(() => createWallet(userId, onSessionExpired))
   let heading = $state<HTMLHeadingElement>()
+  let vaultReady = $state(false)
   const busy = $derived(['creating', 'loading', 'opening', 'verifying'].includes($wallet.status))
 
   $effect(() => {
@@ -32,15 +34,7 @@
   </p>
 
   {#if !$wallet.wallets.length}
-    <div class="space-y-4 rounded-2xl border bg-card p-6">
-      <h2 class="text-2xl">Prepare my vault</h2>
-      <ol class="list-decimal space-y-3 pl-5 text-muted-foreground">
-        <li>Create a personal account at <a class="underline" href="https://vault.whirm.dev" target="_blank" rel="noreferrer">vault.whirm.dev</a>. Choose your own master password inside the vault. Your vault account is separate from your bank account.</li>
-        <li>Install the <a class="underline" href="https://bitwarden.com/download/" target="_blank" rel="noreferrer">official Bitwarden browser extension or mobile app</a>. Select a self-hosted server and enter https://vault.whirm.dev. Sign in to the same personal vault on each device.</li>
-        <li>Enable Bitwarden as your passkey provider, unlock and sync your vault, then choose Bitwarden in the browser or system prompt. The browser controls which providers are offered.</li>
-      </ol>
-      <p class="text-sm">The wallet uses its own origin and RP ID, separately from vault.whirm.dev. We never ask for or receive your master password, vault secrets or private key.</p>
-    </div>
+    <VaultSetup disabled={busy} onReady={() => { vaultReady = true }} />
   {/if}
 
   <div aria-live="polite" aria-atomic="true">
@@ -102,7 +96,7 @@
 
   <div class="flex flex-wrap gap-3">
     {#if !$wallet.wallets.length}
-      <Button size="lg" disabled={$wallet.status !== 'idle' && $wallet.status !== 'confirming'} onclick={() => wallet.create()}>
+      <Button size="lg" disabled={!vaultReady || ($wallet.status !== 'idle' && $wallet.status !== 'confirming')} onclick={() => wallet.create()}>
         {$wallet.status === 'confirming' ? $wallet.draft ? 'Continue with saved passkey' : 'Save my passkey in Bitwarden' : $wallet.draft ? 'Resume wallet creation' : 'Create my wallet'}
       </Button>
     {/if}
