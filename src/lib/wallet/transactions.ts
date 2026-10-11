@@ -72,7 +72,7 @@ export function createTransfer(prepared: PreparedPasskey, dependencies?: Transfe
     },
     balance: (address) => publicClient.getBalance({ address }),
     receipt: async (hash) => {
-      // Receipt lookup uses the same validated relay as preparation, without asking for another passkey.
+      // Receipt lookup uses the same validated bundler as preparation, without asking for another passkey.
       const account = await toPasskeyAccount(prepared.passkey)
       const bundler = await createPrefundedBundler(account)
       return bundler.waitForUserOperationReceipt({ hash, timeout: 45_000 })
@@ -92,7 +92,7 @@ export function createTransfer(prepared: PreparedPasskey, dependencies?: Transfe
   let controller: AbortController | undefined
   let attempt: { account: Account; send: (operation: Operation) => Promise<Hex>; receipt: (hash: Hex) => Promise<UserOperationReceipt<'0.6'>> } | undefined
   let destroyed = false
-  let balancePending = false
+  let balanceRequest = 0
   function update(next: Partial<TransferState>) {
     current = { ...current, ...next }
     if (!destroyed) state.set(current)
@@ -112,11 +112,10 @@ export function createTransfer(prepared: PreparedPasskey, dependencies?: Transfe
   } catch { update({ status: 'error', message: 'Unable to read saved transfer details. Restore browser storage and check the explorer before sending again.' }) }
 
   async function refreshBalance() {
-    if (destroyed || balancePending) return
-    balancePending = true
-    try { const balance = await deps.balance(prepared.address); if (!destroyed) update({ balance, balanceMessage: null }) }
-    catch { if (!destroyed) update({ balanceMessage: 'Unable to load the Base Sepolia balance. Try refreshing.' }) }
-    finally { balancePending = false }
+    if (destroyed) return
+    const request = ++balanceRequest
+    try { const balance = await deps.balance(prepared.address); if (!destroyed && request === balanceRequest) update({ balance, balanceMessage: null }) }
+    catch { if (!destroyed && request === balanceRequest) update({ balanceMessage: 'Unable to load the Base Sepolia balance. Try refreshing.' }) }
   }
 
   async function checkReceipt() {
@@ -129,7 +128,8 @@ export function createTransfer(prepared: PreparedPasskey, dependencies?: Transfe
         || receipt.entryPoint.toLowerCase() !== entryPoint06Address.toLowerCase() || typeof receipt.success !== 'boolean'
         || !/^0x[0-9a-f]{64}$/i.test(receipt.receipt.transactionHash) || !['success', 'reverted'].includes(receipt.receipt.status)) throw new Error('Invalid receipt')
       const success = receipt.success && receipt.receipt.status === 'success'
-      deps.storage.removeItem(key)
+      // Another tab may have resolved this operation and started a newer one while this lookup waited.
+      if (savedSubmission()?.hash === submission.hash) deps.storage.removeItem(key)
       update({ receipt, status: success ? 'success' : 'failed', message: success ? 'Transfer confirmed successfully on Base Sepolia.' : 'The operation was included but failed. The ETH transfer was not confirmed; network fees may have been charged.' })
       await refreshBalance()
     } catch { update({ status: 'pending', message: 'The outcome is still unknown. Check the receipt again or inspect the explorer. Do not send the transfer again.' }) }
@@ -161,6 +161,7 @@ export function createTransfer(prepared: PreparedPasskey, dependencies?: Transfe
       if (maxFee <= 0n || balance < details.value + maxFee) throw new TransferError('The wallet needs enough Base Sepolia ETH for the amount and maximum network fee.')
       if (destroyed || controller !== next) return
       attempt = { account, send: quoted.send, receipt: quoted.receipt }
+      balanceRequest++
       update({ status: 'review', balance, balanceMessage: null, quote: { ...details, maxFee, operation } })
     } catch (error) {
       if (!destroyed && controller === next) update({ status: next.signal.aborted ? 'cancelled' : 'error', message: error instanceof TransferError ? error.message : networkError(error) })

@@ -214,7 +214,7 @@ test('insufficient prefunded balance and unexpected paymaster fail before signin
       const baseQuote = f.deps.quote
       f.deps.quote = async (...args) => ({ ...await baseQuote(...args), operation: { ...operation, paymasterAndData: recipient } })
     }
-    if (scenario === 'network') f.deps.unavailable = () => 'Configure the bundler relay first.'
+    if (scenario === 'network') f.deps.unavailable = () => 'Configure the public bundler first.'
     const transfer = createTransfer(prepared, f.deps)
     await transfer.prepare(recipient, '0.00001')
     assert.equal(get(transfer).status, 'error')
@@ -270,4 +270,42 @@ test('provider diagnostics never expose raw service URLs or credentials in the t
   await transfer.prepare(recipient, '0.00001')
   assert.equal(get(transfer).status, 'error')
   assert.doesNotMatch(get(transfer).message ?? '', /secret|private|https:/)
+})
+
+test('a late initial balance lookup cannot overwrite the refreshed post-transfer balance', async () => {
+  const f = fixture()
+  let balanceCalls = 0
+  let finish!: (balance: bigint) => void
+  f.deps.balance = async () => {
+    balanceCalls++
+    if (balanceCalls === 1) return new Promise<bigint>((resolve) => { finish = resolve })
+    return balanceCalls === 2 ? 1_000_000_000_000_000n : 900_000_000_000_000n
+  }
+  const transfer = createTransfer(prepared, f.deps)
+  const initial = transfer.refreshBalance()
+  await transfer.prepare(recipient, '0.00001')
+  await transfer.confirm()
+  assert.equal(get(transfer).balance, 900_000_000_000_000n)
+  finish(1_000_000_000_000_000n)
+  await initial
+  assert.equal(get(transfer).balance, 900_000_000_000_000n)
+})
+
+test('an old receipt lookup cannot erase a newer pending marker created by another tab', async () => {
+  const f = fixture()
+  const key = `whirm-transfer:84532:${sender}`
+  f.saved.set(key, JSON.stringify({ hash, recipient, amount: '0.00001' }))
+  let finish!: (result: UserOperationReceipt<'0.6'>) => void
+  f.deps.receipt = async () => new Promise((resolve) => { finish = resolve })
+  const transfer = createTransfer(prepared, f.deps)
+  const checking = transfer.checkReceipt()
+  const newer = { hash: txHash, recipient, amount: '0.00002' }
+  f.saved.set(key, JSON.stringify(newer))
+  finish(receipt())
+  await checking
+  assert.deepEqual(JSON.parse(f.saved.get(key)!), newer)
+  await transfer.prepare(recipient, '0.00001')
+  assert.equal(get(transfer).status, 'pending')
+  assert.equal(get(transfer).submission?.hash, txHash)
+  assert.equal(f.calls.send, 0)
 })

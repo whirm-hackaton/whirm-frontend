@@ -8,7 +8,7 @@ The transfer form validates an Ethereum recipient and a positive ETH amount with
 
 ## Configuration
 
-Use the configuration documented in [Base Sepolia network](network.md). `BUNDLER_PROXY_URL` points to the authenticated banking API relay `/rpc/bundler`. Provider keys remain server-side; a public frontend bundler URL must contain no provider credential. If the relay is unconfigured, the UI explains why sending is disabled. The relay must support `eth_sendUserOperation`, `eth_getUserOperationReceipt`, `eth_supportedEntryPoints`, `eth_chainId` and Pimlico gas-price estimation. The network adapter checks the chain and EntryPoint before preparation.
+Use the configuration documented in [Base Sepolia network](network.md). `BUNDLER_URL` points directly to an official public, keyless Pimlico HTTPS endpoint. Wallet network requests go directly to that endpoint with credentials omitted. The banking API handles authentication and wallet metadata. Never put a private provider credential in frontend configuration. If the bundler is unconfigured, the UI explains why sending is disabled. The bundler must support `eth_sendUserOperation`, `eth_getUserOperationReceipt`, `eth_supportedEntryPoints`, `eth_chainId` and Pimlico gas-price estimation. The network adapter checks the chain and EntryPoint before preparation.
 
 ## Pending, cancellation and failure
 
@@ -24,9 +24,9 @@ A bundler which never returns a receipt after an ambiguous submission leaves sen
 
 The implementation uses the installed viem 2.38.5 account-abstraction actions ([official sending guide](https://viem.sh/account-abstraction/guides/sending-user-operations)).
 
-Compile and run the existing [integration suite](integration.md#verification), including `src/lib/wallet/transactions.ts` and `src/lib/wallet/transactions.test.ts`. The new tests cover exact bigint amount validation, review before signing, duplicate clicks, cancellation/unmount races, insufficient funds, forbidden paymaster data, deterministic rejection, timeout/reload safety, receipt identity/execution failure and real viem RPC serialization with every signed field preserved. `pnpm check`, `pnpm build` and `git diff --check` are also required.
+Compile and run the existing [integration suite](integration.md#verification), including `src/lib/wallet/transactions.ts` and `src/lib/wallet/transactions.test.ts`. The new tests cover exact bigint amount validation, review before signing, duplicate clicks, cancellation/unmount races, insufficient funds, forbidden paymaster data, deterministic rejection, timeout/reload safety, receipt identity/execution failure, stale balance and cross-tab receipt races, and real viem RPC serialization with every signed field preserved. `pnpm check`, `pnpm build` and `git diff --check` are also required.
 
-Fixture tests do not prove a real passkey provider or chain transfer. For live acceptance, configure the server relay and public origin/RP ID, fund the **recovered account address** with Base Sepolia ETH for amount plus fees, then:
+Fixture tests do not prove a real passkey provider or chain transfer. For live acceptance, configure the public bundler endpoint and wallet origin/RP ID, fund the **recovered account address** with Base Sepolia ETH for amount plus fees, then:
 
 1. Recover the original passkey wallet in the configured secure origin.
 2. Confirm its displayed balance and enter a controlled, different recipient with a small test ETH amount.
