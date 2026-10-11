@@ -18,6 +18,7 @@ type WalletState = {
   message: string | null
   draft: PasskeyCredential | null
   openedWalletId: string | null
+  openedPasskey?: PreparedPasskey
 }
 
 const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
@@ -69,8 +70,8 @@ export function createWallet(userId: string, onSessionExpired: () => void, depen
   let reopening: { wallet: WalletMetadata; controller: AbortController } | undefined
 
   function setState(next: WalletState) {
-    current = next
-    state.set(next)
+    current = next.openedWalletId ? next : { ...next, openedPasskey: undefined }
+    state.set(current)
   }
 
   function loadDraft() {
@@ -245,7 +246,7 @@ export function createWallet(userId: string, onSessionExpired: () => void, depen
       const recovered = await (deps.recover ?? recoverPasskeyAccount)(attempt.wallet.address, controller.signal)
       if (destroyed || pending !== controller) return
       if (recovered.address.toLowerCase() !== attempt.wallet.address) throw new Error('The reconstructed account does not match your saved wallet. Recovery stopped; no replacement was created.')
-      setState({ ...current, status: 'ready', openedWalletId: attempt.wallet.id,
+      setState({ ...current, status: 'ready', openedWalletId: attempt.wallet.id, openedPasskey: recovered,
         message: 'Wallet reopened with your existing passkey. Its address matches the registered wallet. This does not verify your bank association.',
         wallets: [attempt.wallet] })
       reopening = undefined

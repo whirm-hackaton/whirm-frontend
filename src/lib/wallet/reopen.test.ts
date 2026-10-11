@@ -51,14 +51,17 @@ test('a fresh profile recovers on confirmation using only GET /wallet and retain
   await wallet.reopen(metadata.id)
   assert.equal(get(wallet).status, 'awaiting-passkey')
   assert.equal(get(wallet).openedWalletId, null)
+  assert.equal(get(wallet).openedPasskey, undefined)
   assert.deepEqual(f.calls, [])
   await wallet.confirmReopen()
   assert.equal(fetch.mock.callCount(), 2)
   assert.deepEqual(f.calls, [metadata.address])
   assert.equal(get(wallet).openedWalletId, metadata.id)
+  assert.deepEqual(get(wallet).openedPasskey, { address: metadata.address, passkey })
   assert.deepEqual(get(wallet).wallets, [metadata])
   await wallet.restore()
   assert.equal(get(wallet).openedWalletId, null)
+  assert.equal(get(wallet).openedPasskey, undefined)
 })
 
 test('mismatch, absent passkey, rejection and RPC failures never replace or promote the wallet', async (context) => {
@@ -75,6 +78,7 @@ test('mismatch, absent passkey, rejection and RPC failures never replace or prom
     await wallet.confirmReopen()
     assert.equal(get(wallet).status, 'error')
     assert.equal(get(wallet).openedWalletId, null)
+    assert.equal(get(wallet).openedPasskey, undefined)
     assert.deepEqual(get(wallet).wallets, [metadata])
     assert.equal(fetch.mock.callCount(), 2)
     fetch.mock.restore()
@@ -94,6 +98,7 @@ test('GET 404, server refusal, invalid user/chain and session expiry never reque
     await wallet.confirmReopen()
     assert.deepEqual(f.calls, [])
     assert.equal(get(wallet).openedWalletId, null)
+    assert.equal(get(wallet).openedPasskey, undefined)
     assert.equal(get(wallet).status, scenario === 404 ? 'idle' : scenario === 401 ? 'expired' : 'error')
     assert.equal(expired, scenario === 401 ? 1 : 0)
     if (scenario === 404) assert.deepEqual(get(wallet).wallets, [])
@@ -120,6 +125,7 @@ test('cancel or unmount discards a late recovered account and aborts the provide
     resolve({ address: metadata.address, passkey })
     await recovering
     assert.equal(get(wallet).openedWalletId, null)
+    assert.equal(get(wallet).openedPasskey, undefined)
     assert.deepEqual(get(wallet).wallets, [metadata])
     fetch.mock.restore()
   }
