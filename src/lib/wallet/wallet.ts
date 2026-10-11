@@ -109,7 +109,7 @@ export function createWallet(userId: string, onSessionExpired: () => void, depen
     reopening = undefined
     pending = controller
     let hasResponse = false
-    setState({ ...current, status: create ? 'creating' : 'loading', message: null, openedWalletId: null })
+    setState({ ...current, status: create ? 'creating' : 'loading', message: null, openedWalletId: create ? null : current.openedWalletId })
 
     try {
       if (create) {
@@ -161,7 +161,7 @@ export function createWallet(userId: string, onSessionExpired: () => void, depen
       }
       const missing = !create && response.status === 404
       if (!response.ok && !missing) {
-        setState({ ...current, status: 'error', message: response.status === 400
+        setState({ ...current, status: 'error', openedWalletId: response.status >= 500 ? current.openedWalletId : null, message: response.status === 400
           ? 'Wallet registration is temporarily unavailable. Your public passkey settings have been kept in this browser. Refresh to retry without creating another passkey.'
           : response.status === 409 ? 'Your account already has a wallet or this address is already associated. Refresh to load your wallet. Your passkey has been kept.'
             : response.status >= 500 ? 'The wallet service is unavailable. Please refresh and try again.'
@@ -192,10 +192,14 @@ export function createWallet(userId: string, onSessionExpired: () => void, depen
         try { canRestartSetup = hasInterruptedMarker() } catch { /* Corrupt or unreadable data must stay protected. */ }
         if (canRestartSetup) message = 'Your earlier passkey setup was interrupted. No wallet is registered for this account. Check your synced Bitwarden vault before restarting; a saved passkey must be kept.'
       }
-      setState({ ...current, status: wallets.length ? 'ready' : message ? 'error' : confirm ? 'confirming' : 'idle', wallets, message, canRestartSetup })
+      const openedWallet = current.wallets.find((wallet) => wallet.id === current.openedWalletId)
+      const keepOpened = openedWallet && wallets.some((wallet) => wallet.id === openedWallet.id
+        && wallet.userId === openedWallet.userId && wallet.address === openedWallet.address && wallet.chainId === openedWallet.chainId)
+      setState({ ...current, status: wallets.length ? 'ready' : message ? 'error' : confirm ? 'confirming' : 'idle', wallets, message, canRestartSetup,
+        openedWalletId: keepOpened ? current.openedWalletId : null })
     } catch (error) {
       if (destroyed || pending !== controller) return
-      setState({ ...current, status: 'error', message: hasResponse
+      setState({ ...current, status: 'error', ...(hasResponse ? { wallets: [], openedWalletId: null } : {}), message: hasResponse
         ? 'The server returned an invalid wallet response. Please refresh and try again. Your passkey has been kept.'
         : create ? uncertain && !current.draft
           ? 'The passkey request has an uncertain result. Unlock Bitwarden and recover the existing passkey before trying again.'

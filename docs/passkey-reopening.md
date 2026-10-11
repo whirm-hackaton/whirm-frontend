@@ -1,8 +1,8 @@
 # Reopen the same passkey wallet (HS-42)
 
 1. Sign in to the bank. On the new device, unlock and sync the same personal Bitwarden vault configured with https://vault.whirm.dev. Enable its passkey provider.
-2. Choose **Recover my wallet**. The frontend refreshes GET /wallet and validates user, address and Base Sepolia chain (84532).
-3. Choose **Use my existing passkey**. This direct click requests a discoverable credential with a fresh random challenge, the configured RP ID and required user verification. No allowCredentials list or old browser receipt is needed. Choose the original wallet passkey in Bitwarden.
+2. Choose **Open wallet**. The frontend refreshes GET /wallet and validates user, address and Base Sepolia chain (84532).
+3. Choose **Continue with passkey**. This direct click requests a discoverable credential with a fresh random challenge, the configured RP ID and required user verification. No allowCredentials list or old browser receipt is needed. Choose the original wallet passkey in Bitwarden.
 4. The frontend validates credential ID/raw ID, challenge, origin, cross-origin flag, RP ID hash and user presence/verification flags. It hashes authenticatorData plus SHA-256(clientDataJSON), parses the ES256 DER signature and recovers the possible P-256 public keys with @noble/curves. High-S WebAuthn signatures are accepted.
 5. For each recovered key, viem calculates the Coinbase account address using the same HS-41 version 1.1, factory, one WebAuthn owner and creation nonce 0. Only the key whose address matches GET /wallet permits reopening. No key or metadata is expected from the backend.
 

@@ -1,5 +1,6 @@
 <script lang="ts">
-  import { onDestroy, onMount, type Snippet } from 'svelte'
+  import { onDestroy, onMount, tick, type Snippet } from 'svelte'
+  import swissquoteLogo from '../../assets/swissquote-logo.svg'
   import { Button } from '$lib/components/ui/button'
   import { createAuth, type AuthSession } from './auth'
 
@@ -12,6 +13,7 @@
   let displayName = $state('')
   let mode = $state<'signin' | 'signup'>('signin')
   let formMessage = $state<string | null>(null)
+  let formHeading = $state<HTMLHeadingElement>()
   const auth = createAuth()
   const session = $derived($auth.session)
   const busy = $derived(['checking', 'connecting', 'disconnecting'].includes($auth.status))
@@ -53,122 +55,108 @@
     else void auth.connect(email, submittedPassword)
   }
 
-  function switchMode() {
+  async function switchMode() {
     if (busy) return
     mode = mode === 'signin' ? 'signup' : 'signin'
     password = ''
     formMessage = null
     auth.clearFeedback()
+    await tick()
+    formHeading?.focus()
   }
 </script>
 
 <svelte:head>
   <title>{session && children ? 'Whirm · Passkey wallet' : mode === 'signup' ? 'Whirm · Sign up' : 'Whirm · Sign in'}</title>
+  <meta name="description" content="A personal passkey wallet. Explore the Whirm digital asset wallet hackathon prototype for Swissquote on Base Sepolia." />
 </svelte:head>
 
-<main lang="en" class="mx-auto flex min-h-svh w-full max-w-5xl flex-col px-5 py-8 sm:px-10 sm:py-12">
-  <header class="flex flex-wrap items-center justify-between gap-3 border-b pb-6">
-    <span class="text-xl font-bold tracking-tight">Swissquote <span class="text-primary">×</span> Whirm</span>
-    <span class="rounded-full bg-secondary px-3 py-1 text-sm font-semibold">Your account</span>
+{#snippet feedback()}
+  {#if $auth.status === 'checking' || $auth.status === 'connecting' || $auth.status === 'disconnecting'}
+    <p role="status" class="notice">{$auth.status === 'checking' ? 'Checking your session…' : $auth.status === 'disconnecting' ? 'Signing out…' : mode === 'signup' ? 'Creating your account…' : 'Signing in…'}</p>
+  {:else if $auth.status === 'refused'}
+    <p role="alert" class="notice notice-error">Check your email and password, then try again.</p>
+  {:else if $auth.status === 'expired'}
+    <p role="alert" class="notice notice-pending">Your session has expired. Sign in again to continue.</p>
+  {:else if $auth.status === 'error'}
+    <p role="alert" class="notice notice-error">{$auth.message}</p>
+  {/if}
+{/snippet}
+
+<div lang="en" class="flex min-h-svh flex-col">
+  <a href="#main-content" class="skip-link">Skip to main content</a>
+  <header class="site-header">
+    <div class="page-container flex min-h-20 flex-wrap items-center justify-between gap-4 py-4">
+      <div class="flex shrink-0 items-center gap-3">
+        <img src={swissquoteLogo} alt="Swissquote" width="35" height="35" />
+        <span class="border-l pl-3 text-lg font-semibold">Whirm</span>
+      </div>
+      {#if session}
+        <div class="flex min-w-0 flex-wrap items-center gap-4">
+          <div class="min-w-0 text-sm">
+            <p class="max-w-48 truncate font-semibold">{session.displayName || session.email}</p>
+            {#if session.displayName && session.displayName !== session.email}
+              <p class="max-w-48 truncate text-muted-foreground">{session.email}</p>
+            {/if}
+          </div>
+          <Button variant="outline" size="sm" disabled={busy} onclick={() => auth.disconnect()}>{$auth.status === 'disconnecting' ? 'Signing out…' : 'Sign out'}</Button>
+        </div>
+      {/if}
+    </div>
   </header>
 
-  <div class="my-auto grid gap-10 py-12 md:grid-cols-2 md:items-center md:gap-16">
-    {#if session && children}
-      {@render children(session, auth.expire)}
-    {:else}
-      <section aria-labelledby="auth-title">
-        <p class="mb-4 text-sm font-semibold uppercase tracking-widest text-accent-foreground">Your connection</p>
-        <h1 id="auth-title" class="text-4xl leading-tight sm:text-5xl">Your first step towards a wallet.</h1>
-        <p class="mt-6 text-lg text-muted-foreground">{mode === 'signup' ? 'Create your account to start your Whirm journey.' : 'Sign in to your account to continue your Whirm journey.'}</p>
-        <p class="mt-6 rounded-lg border bg-secondary p-4 text-sm text-secondary-foreground">Your session identifies you. It does not authorize blockchain spending.</p>
-      </section>
-    {/if}
-
-    <section aria-labelledby="connection-title" class="rounded-2xl border bg-card p-6 shadow-sm sm:p-8" aria-busy={busy}>
-      <h2 id="connection-title" class="text-2xl leading-tight">{session ? 'You are signed in' : mode === 'signup' ? 'Create your account' : 'Sign in to your account'}</h2>
-      <p class="mt-2 text-sm text-muted-foreground">{session ? 'Manage your session here.' : mode === 'signup' ? 'Enter your name, email and a new password.' : 'Enter your email and password.'}</p>
-
-      <div class="mt-6 min-h-24" aria-live="polite" aria-atomic="true">
-        {#if $auth.status === 'checking'}
-          <div role="status" class="rounded-lg border bg-secondary p-4">
-            <p class="font-semibold">Checking your session…</p>
-            <p class="mt-1 text-sm text-muted-foreground">Checking whether you are already signed in.</p>
-          </div>
-        {:else if $auth.status === 'connecting'}
-          <div role="status" class="rounded-lg border bg-secondary p-4">
-            <p class="font-semibold">{mode === 'signup' ? 'Creating your account…' : 'Signing in…'}</p>
-            <p class="mt-1 text-sm text-muted-foreground">{mode === 'signup' ? 'Creating your account and opening your session.' : 'Verifying your credentials.'}</p>
-          </div>
-        {:else if $auth.status === 'disconnecting'}
-          <div role="status" class="rounded-lg border bg-secondary p-4">
-            <p class="font-semibold">Signing out…</p>
-            <p class="mt-1 text-sm text-muted-foreground">Your session is being closed.</p>
-          </div>
-        {:else if $auth.status === 'refused'}
-          <div role="alert" class="rounded-lg border border-destructive/30 bg-destructive/5 p-4">
-            <p class="font-semibold">Sign-in failed</p>
-            <p class="mt-1 text-sm">Check your email and password, then try again.</p>
-          </div>
-        {:else if $auth.status === 'expired'}
-          <div role="alert" class="rounded-lg border bg-accent p-4 text-accent-foreground">
-            <p class="font-semibold">Your session has expired</p>
-            <p class="mt-1 text-sm">Sign in again to continue.</p>
-          </div>
-        {:else if $auth.status === 'error'}
-          <div role="alert" class="rounded-lg border border-destructive/30 bg-destructive/5 p-4">
-            <p class="font-semibold">Something went wrong</p>
-            <p class="mt-1 text-sm">{$auth.message}</p>
-          </div>
-        {:else if session}
-          <div role="status" class="rounded-lg border bg-secondary p-4">
-            <p class="font-semibold">Signed in · {session.displayName || session.email}</p>
-            <p class="mt-1 break-all text-sm text-muted-foreground">{session.email}</p>
-          </div>
-        {:else}
-          <div role="status" class="rounded-lg border border-dashed p-4">
-            <p class="font-semibold">You are signed out</p>
-            <p class="mt-1 text-sm text-muted-foreground">No active session.</p>
-          </div>
-        {/if}
-      </div>
-
-      {#if session}
-        <Button class="mt-5 w-full bg-accent-foreground hover:bg-accent-foreground/90" size="lg" disabled={busy} onclick={() => auth.disconnect()}>
-          {busy ? 'Signing out…' : 'Sign out'}
-        </Button>
+  <main id="main-content" tabindex="-1" class="page-container app-main flex-1">
+    {#if session}
+      {#if $auth.status === 'error' || $auth.status === 'disconnecting'}
+        <div class="mb-6">{@render feedback()}</div>
+      {/if}
+      {#if children}
+        {@render children(session, auth.expire)}
       {:else}
-        <form class="mt-5 space-y-4" onsubmit={connect}>
+        <h1 class="display-title">Your account</h1>
+        <p class="mt-4 text-muted-foreground">You are signed in.</p>
+      {/if}
+    {:else}
+      <section aria-labelledby="connection-title" class="auth-form-panel surface-panel" aria-busy={busy}>
+        <h1 id="connection-title" tabindex="-1" bind:this={formHeading} class="display-title">{mode === 'signup' ? 'Create account' : 'Sign in'}</h1>
+        <p class="mt-3 text-muted-foreground">{mode === 'signup' ? 'Create your Whirm account to set up a wallet.' : 'Access your personal wallet.'}</p>
+
+        <form class="mt-6 space-y-6" onsubmit={connect}>
           {#if mode === 'signup'}
             <div>
-              <label for="auth-name" class="mb-2 block text-sm font-semibold">Name</label>
-              <input id="auth-name" name="displayName" type="text" autocomplete="name" minlength="1" maxlength="150" required bind:value={displayName} disabled={busy} class="h-11 w-full rounded-md border border-input bg-background px-3 text-base outline-none focus-visible:border-ring focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-60" />
+              <label for="auth-name" class="mb-2 block font-semibold">Name</label>
+              <input id="auth-name" name="displayName" type="text" autocomplete="name" minlength="1" maxlength="150" required bind:value={displayName} disabled={busy} aria-invalid={!!formMessage} aria-describedby={formMessage ? 'auth-name-error' : undefined} class="field-input" placeholder="Your full name" />
+              {#if formMessage}<p id="auth-name-error" role="alert" class="mt-2 text-sm text-destructive">{formMessage}</p>{/if}
             </div>
           {/if}
           <div>
-            <label for="auth-email" class="mb-2 block text-sm font-semibold">Email</label>
-            <input id="auth-email" name="email" type="email" autocomplete="username" maxlength="255" required bind:value={email} disabled={busy} class="h-11 w-full rounded-md border border-input bg-background px-3 text-base outline-none focus-visible:border-ring focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-60" />
+            <label for="auth-email" class="mb-2 block font-semibold">Email address</label>
+            <input id="auth-email" name="email" type="email" autocomplete="username" maxlength="255" required bind:value={email} disabled={busy} class="field-input" placeholder="you@example.com" />
           </div>
           <div>
-            <label for="auth-password" class="mb-2 block text-sm font-semibold">Password</label>
-            <input id="auth-password" name="password" type="password" autocomplete={mode === 'signup' ? 'new-password' : 'current-password'} minlength={mode === 'signup' ? 8 : 1} maxlength="1024" aria-describedby={mode === 'signup' ? 'auth-password-requirements' : undefined} required bind:value={password} disabled={busy} class="h-11 w-full rounded-md border border-input bg-background px-3 text-base outline-none focus-visible:border-ring focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-60" />
+            <label for="auth-password" class="mb-2 block font-semibold">Password</label>
+            <input id="auth-password" name="password" type="password" autocomplete={mode === 'signup' ? 'new-password' : 'current-password'} minlength={mode === 'signup' ? 8 : 1} maxlength="1024" aria-describedby={mode === 'signup' ? 'auth-password-requirements' : undefined} required bind:value={password} disabled={busy} class="field-input" placeholder={mode === 'signup' ? 'Create a password' : 'Enter your password'} />
             {#if mode === 'signup'}
               <p id="auth-password-requirements" class="mt-2 text-sm text-muted-foreground">Use 8 to 1024 characters. Uppercase letters, numbers and symbols are optional.</p>
-              <p class="mt-2 text-sm text-muted-foreground">This is your bank account password. Create your vault master password separately in Bitwarden.</p>
             {/if}
           </div>
-          {#if formMessage}
-            <p role="alert" class="text-sm text-destructive">{formMessage}</p>
+          {#if mode === 'signup'}
+            <p class="text-sm text-muted-foreground">This account is separate from your Bitwarden vault and its master password.</p>
           {/if}
-          <Button type="submit" class="w-full bg-accent-foreground hover:bg-accent-foreground/90" size="lg" disabled={busy}>
-            {$auth.status === 'checking' ? 'Checking your session…' : mode === 'signup' ? $auth.status === 'connecting' ? 'Creating your account…' : 'Create account' : $auth.status === 'connecting' ? 'Signing in…' : $auth.status === 'expired' ? 'Sign in again' : $auth.status === 'refused' ? 'Try signing in again' : 'Sign in'}
-          </Button>
-          <Button type="button" variant="outline" class="w-full" disabled={busy} onclick={switchMode}>
-            {mode === 'signup' ? 'Already have an account? Sign in' : 'New to Whirm? Sign up'}
+          {@render feedback()}
+          <Button type="submit" class="w-full" disabled={busy}>
+            {$auth.status === 'checking' ? 'Checking session…' : mode === 'signup' ? $auth.status === 'connecting' ? 'Creating account…' : 'Create account' : $auth.status === 'connecting' ? 'Signing in…' : 'Sign in'}
           </Button>
         </form>
-      {/if}
-    </section>
-  </div>
+        <div class="mt-4 flex flex-wrap items-center justify-center gap-x-2 text-sm">
+          <span class="text-muted-foreground">{mode === 'signup' ? 'Already have an account?' : 'New to Whirm?'}</span>
+          <button type="button" class="text-link inline-flex min-h-11 items-center" disabled={busy} onclick={switchMode}>{mode === 'signup' ? 'Sign in' : 'Create an account'}</button>
+        </div>
+      </section>
+    {/if}
+  </main>
 
-  <footer class="border-t pt-5 text-sm text-muted-foreground">Your password is only used to sign in.</footer>
-</main>
+  <footer class="page-container py-6 text-sm text-muted-foreground">
+    <p>Hackathon prototype{#if !session} <span class="mx-2" aria-hidden="true">·</span> Base Sepolia test network{/if}</p>
+  </footer>
+</div>

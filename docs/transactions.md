@@ -1,10 +1,10 @@
 # Prefunded Base Sepolia transfers (HS-15)
 
-Recover the registered wallet with its existing passkey, then use **Send test ETH**. The address must match the recovered Coinbase Smart Account 1.1 on Base Sepolia, using EntryPoint 0.6. Recovery authorizes no spending and leaves the backend wallet association unchanged (`candidate` stays `candidate`). No signing key is sent to the backend.
+Open the registered wallet with its existing passkey, then use the **Send ETH** form. The address must match the recovered Coinbase Smart Account 1.1 on Base Sepolia, using EntryPoint 0.6. Opening authorizes no spending and leaves the backend wallet association unchanged (`candidate` stays `candidate`). No signing key is sent to the backend.
 
 The transfer form validates an Ethereum recipient and a positive ETH amount with at most 18 decimal places. Zero addresses, self-transfers, exponents and comma separators are refused. The client prepares the operation and loads the balance before showing the exact recipient, amount, network, maximum fee and maximum total. This path requires the account balance to cover both amount and fees; sponsoring is not enabled. The fee ceiling comes from the prepared gas limits and `maxFeePerGas`; the execution receipt reports the actual fee.
 
-**Authorize and send with my passkey** invokes `account.signUserOperation` before another asynchronous action, retaining the original passkey AbortSignal. Viem may resolve the already-calculated account address first, but no gas/nonce/paymaster network preparation precedes signing. Submission uses viem's accountless `sendUserOperation` action with all reviewed fields and the resulting real signature. The account is explicitly cleared on both client and request, so submission cannot prepare or sign the operation again.
+**Authorize and send** invokes `account.signUserOperation` before another asynchronous action, retaining the original passkey AbortSignal. Viem may resolve the already-calculated account address first, but no gas/nonce/paymaster network preparation precedes signing. Submission uses viem's accountless `sendUserOperation` action with all reviewed fields and the resulting real signature. The account is explicitly cleared on both client and request, so submission cannot prepare or sign the operation again.
 
 ## Configuration
 

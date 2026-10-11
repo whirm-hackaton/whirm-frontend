@@ -6,6 +6,7 @@ This template should help get you started developing with Svelte and TypeScript 
 
 Tailwind CSS 4 is configured through the Vite plugin. The styles and
 shadcn-svelte theme are in `src/app.css`, with the `$lib` alias pointing to `src/lib`.
+
 The auth screen uses the `Button` component. See [Authentication](auth.md) for backend setup, the session contract, and verification steps.
 
 To add a component:

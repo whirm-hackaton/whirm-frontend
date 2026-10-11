@@ -59,9 +59,10 @@ test('a fresh profile recovers on confirmation using only GET /wallet and retain
   assert.equal(get(wallet).openedWalletId, metadata.id)
   assert.deepEqual(get(wallet).openedPasskey, { address: metadata.address, passkey })
   assert.deepEqual(get(wallet).wallets, [metadata])
+  const openedPasskey = get(wallet).openedPasskey
   await wallet.restore()
-  assert.equal(get(wallet).openedWalletId, null)
-  assert.equal(get(wallet).openedPasskey, undefined)
+  assert.equal(get(wallet).openedWalletId, metadata.id)
+  assert.equal(get(wallet).openedPasskey, openedPasskey)
 })
 
 test('mismatch, absent passkey, rejection and RPC failures never replace or promote the wallet', async (context) => {
@@ -129,4 +130,104 @@ test('cancel or unmount discards a late recovered account and aborts the provide
     assert.deepEqual(get(wallet).wallets, [metadata])
     fetch.mock.restore()
   }
+})
+
+
+test('refresh keeps the opened credential reference while pending and after a metadata-only change', async (context) => {
+  const f = fixture()
+  const fetch = context.mock.method(globalThis, 'fetch', f.route)
+  const wallet = createWallet(userId, () => assert.fail('Unexpected expiration'), f.deps)
+  await wallet.restore()
+  await wallet.reopen(metadata.id)
+  await wallet.confirmReopen()
+  const openedPasskey = get(wallet).openedPasskey
+  let resolve!: (value: Response) => void
+  fetch.mock.mockImplementation(() => new Promise<Response>((done) => { resolve = done }))
+  const refreshing = wallet.restore()
+  assert.equal(get(wallet).status, 'loading')
+  assert.equal(get(wallet).openedWalletId, metadata.id)
+  assert.equal(get(wallet).openedPasskey, openedPasskey)
+  assert.deepEqual(get(wallet).wallets, [metadata])
+  const verified = { ...metadata, status: 'verified', verifiedAt: metadata.createdAt }
+  resolve(Response.json({ wallet: verified }))
+  await refreshing
+  assert.equal(get(wallet).status, 'ready')
+  assert.equal(get(wallet).openedWalletId, metadata.id)
+  assert.equal(get(wallet).openedPasskey, openedPasskey)
+  assert.deepEqual(get(wallet).wallets, [verified])
+  assert.equal(f.calls.length, 1)
+})
+
+test('temporary network and server failures keep the opened wallet available for refresh retry', async (context) => {
+  for (const failure of ['network', 500, 503] as const) {
+    const f = fixture()
+    const fetch = context.mock.method(globalThis, 'fetch', f.route)
+    const wallet = createWallet(userId, () => assert.fail('Unexpected expiration'), f.deps)
+    await wallet.restore()
+    await wallet.reopen(metadata.id)
+    await wallet.confirmReopen()
+    const openedPasskey = get(wallet).openedPasskey
+    fetch.mock.mockImplementation(async () => {
+      if (failure === 'network') throw new TypeError('Network unavailable')
+      return new Response(null, { status: failure })
+    })
+    await wallet.restore()
+    assert.equal(get(wallet).status, 'error')
+    assert.ok(get(wallet).message)
+    assert.equal(get(wallet).openedWalletId, metadata.id)
+    assert.equal(get(wallet).openedPasskey, openedPasskey)
+    assert.deepEqual(get(wallet).wallets, [metadata])
+    fetch.mock.mockImplementation(f.route)
+    await wallet.restore()
+    assert.equal(get(wallet).openedPasskey, openedPasskey)
+    fetch.mock.restore()
+  }
+})
+
+test('missing, changed, invalid and expired wallet responses revoke opened access', async (context) => {
+  for (const scenario of [404, 401, 'id', 'address', 'user', 'chain', 'json', 'shape'] as const) {
+    const f = fixture()
+    let expired = 0
+    const fetch = context.mock.method(globalThis, 'fetch', f.route)
+    const wallet = createWallet(userId, () => { expired++ }, f.deps)
+    await wallet.restore()
+    await wallet.reopen(metadata.id)
+    await wallet.confirmReopen()
+    const changed = { ...metadata, ...(scenario === 'id' ? { id: 'b52c86b3-eb08-4fab-9357-631b096d0867' }
+      : scenario === 'address' ? { address: '0x2222222222222222222222222222222222222222' }
+        : scenario === 'user' ? { userId: 'another-user' } : { chainId: 1 }) }
+    fetch.mock.mockImplementation(async () => typeof scenario === 'number' ? new Response(null, { status: scenario })
+      : scenario === 'json' ? new Response('invalid JSON')
+        : Response.json(scenario === 'shape' ? {} : { wallet: changed }))
+    await wallet.restore()
+    assert.equal(get(wallet).openedWalletId, null)
+    assert.equal(get(wallet).openedPasskey, undefined)
+    assert.equal(expired, scenario === 401 ? 1 : 0)
+    assert.deepEqual(get(wallet).wallets, scenario === 'id' || scenario === 'address' ? [changed] : [])
+    if (scenario === 401) {
+      const calls = fetch.mock.callCount()
+      await wallet.restore()
+      await wallet.reopen(metadata.id)
+      assert.equal(fetch.mock.callCount(), calls, 'Expired session must not restart wallet requests')
+    }
+    fetch.mock.restore()
+  }
+})
+
+test('a late refresh cannot restore access after cancellation', async (context) => {
+  const f = fixture()
+  const fetch = context.mock.method(globalThis, 'fetch', f.route)
+  const wallet = createWallet(userId, () => assert.fail('Unexpected expiration'), f.deps)
+  await wallet.restore()
+  await wallet.reopen(metadata.id)
+  await wallet.confirmReopen()
+  let resolve!: (value: Response) => void
+  fetch.mock.mockImplementation(() => new Promise<Response>((done) => { resolve = done }))
+  const refreshing = wallet.restore()
+  wallet.cancel()
+  resolve(Response.json({ wallet: metadata }))
+  await refreshing
+  assert.equal(get(wallet).status, 'cancelled')
+  assert.equal(get(wallet).openedWalletId, null)
+  assert.equal(get(wallet).openedPasskey, undefined)
 })
