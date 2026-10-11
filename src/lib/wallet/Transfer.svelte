@@ -20,6 +20,8 @@
   let stageHeading = $state<HTMLHeadingElement>()
   let amountInput = $state<HTMLInputElement>()
   let showFunding = $state(false)
+  const copySuccessMessage = 'Recipient address copied.'
+  const copyErrorMessage = 'Copy failed. Copy the address above.'
   let copyMessage = $state('')
   let copyFailed = $state(false)
   const locked = $derived(['preparing', 'review', 'signing', 'sending', 'pending'].includes($transfer.status))
@@ -63,10 +65,10 @@
     try {
       await navigator.clipboard.writeText(address)
       copyFailed = false
-      copyMessage = 'Recipient address copied.'
+      copyMessage = copySuccessMessage
     } catch {
       copyFailed = true
-      copyMessage = 'Copy failed. Copy the address above.'
+      copyMessage = copyErrorMessage
     }
   }
 
@@ -121,9 +123,14 @@
       <div class="financial-primary"><dt>Recipient</dt><dd class="font-mono text-base">{$transfer.quote.recipient}</dd></div>
       <div class="financial-primary"><dt>Amount to send</dt><dd class="amount-value">{formatEth($transfer.quote.value)}</dd></div>
     </dl>
-    <div class="relative flex">
+    <div class="flex flex-col items-start gap-1">
       <Button variant="outline" size="sm" onclick={() => copyRecipient($transfer.quote!.recipient)}>Copy recipient address</Button>
-      <p role="status" class={`absolute inset-x-0 top-full mt-1 text-sm ${copyFailed ? 'text-destructive' : 'text-[var(--success)]'}`}>{copyMessage}</p>
+      <div class="grid w-full text-sm">
+        <!-- Reserve both messages before copying, including when enlarged text wraps. -->
+        <span aria-hidden="true" class="invisible col-start-1 row-start-1">{copySuccessMessage}</span>
+        <span aria-hidden="true" class="invisible col-start-1 row-start-1">{copyErrorMessage}</span>
+        <p role="status" class={`col-start-1 row-start-1 ${copyFailed ? 'text-destructive' : 'text-[var(--success)]'}`}>{copyMessage}</p>
+      </div>
     </div>
     <dl class="financial-summary fee-summary">
       <div><dt>Maximum network fee</dt><dd>{formatEth($transfer.quote.maxFee)}</dd></div>
