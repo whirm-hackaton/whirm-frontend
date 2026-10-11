@@ -17,6 +17,14 @@ The frontend prepares a Coinbase Smart Account on Base Sepolia with one P-256 We
 
 No master password, vault secret, private key or seed is requested, stored, sent or logged. Vault registration does not happen through the bank application.
 
+## Interrupted setup
+
+A provider request stores `{ registering: true }` before requesting a passkey. Closing/reloading during that request can leave this marker even if Bitwarden saved nothing. The marker blocks automatic creation to prevent a duplicate; API `GET /wallet` returning 404 confirms only that no wallet metadata exists, not that no passkey exists.
+
+When the API returns 404 and the only saved data is this exact marker (no credential draft), the UI offers **Resume an interrupted setup**. The user must first unlock/sync Bitwarden and explicitly confirm that no Whirm passkey was saved for this account. **Restart wallet setup** acquires the existing cross-tab creation lock, checks the API again and re-reads storage. Only a fresh 404 with the unchanged marker permits removing that one marker. Existing wallet, credential data, malformed/unreadable storage, session failure, other API failures or a busy lock keep data protected. Restart enables the normal creation flow; it never creates a passkey automatically or deletes anything in Bitwarden/on-chain.
+
+If a passkey exists but the API has no wallet address, retain it and coordinate recovery with the team. This action is not a recovery implementation for that case. Do not clear site storage or delete a credential to bypass the guard. A 401 indicates authentication failure and must be resolved through bank sign-in.
+
 ## Stable context and SDK parameters
 
 Configure these public values before building:

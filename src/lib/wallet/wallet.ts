@@ -19,6 +19,7 @@ type WalletState = {
   draft: PasskeyCredential | null
   openedWalletId: string | null
   openedPasskey?: PreparedPasskey
+  canRestartSetup?: boolean
 }
 
 const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
@@ -70,8 +71,17 @@ export function createWallet(userId: string, onSessionExpired: () => void, depen
   let reopening: { wallet: WalletMetadata; controller: AbortController } | undefined
 
   function setState(next: WalletState) {
+    next = { ...next, canRestartSetup: next.status === 'error' && !next.wallets.length && !next.draft && !!next.canRestartSetup }
     current = next.openedWalletId ? next : { ...next, openedPasskey: undefined }
     state.set(current)
+  }
+
+  function hasInterruptedMarker() {
+    const raw = deps.storage.getItem(storageKey)
+    if (!raw) return false
+    const value: unknown = JSON.parse(raw)
+    return !!value && typeof value === 'object' && Object.keys(value).length === 1
+      && 'registering' in value && value.registering === true
   }
 
   function loadDraft() {
@@ -86,7 +96,7 @@ export function createWallet(userId: string, onSessionExpired: () => void, depen
     const value: unknown = JSON.parse(raw)
     if (!isPasskeyCredential(value)) {
       uncertain = true
-      throw new Error('A previous passkey request has an uncertain result. Do not create another passkey. Unlock Bitwarden and recover the existing wallet.')
+      throw new Error('A previous passkey request has an uncertain result. Check Bitwarden before creating another passkey. Keep any saved Whirm passkey.')
     }
     setState({ ...current, draft: { credentialId: value.credentialId, publicKey: value.publicKey, rpId: value.rpId, origin: value.origin } })
   }
@@ -177,7 +187,12 @@ export function createWallet(userId: string, onSessionExpired: () => void, depen
         current = { ...current, draft: null }
         uncertain = false
       }
-      setState({ ...current, status: wallets.length ? 'ready' : message ? 'error' : confirm ? 'confirming' : 'idle', wallets, message })
+      let canRestartSetup = false
+      if (missing && message && !current.draft) {
+        try { canRestartSetup = hasInterruptedMarker() } catch { /* Corrupt or unreadable data must stay protected. */ }
+        if (canRestartSetup) message = 'Your earlier passkey setup was interrupted. No wallet is registered for this account. Check your synced Bitwarden vault before restarting; a saved passkey must be kept.'
+      }
+      setState({ ...current, status: wallets.length ? 'ready' : message ? 'error' : confirm ? 'confirming' : 'idle', wallets, message, canRestartSetup })
     } catch (error) {
       if (destroyed || pending !== controller) return
       setState({ ...current, status: 'error', message: hasResponse
@@ -189,6 +204,43 @@ export function createWallet(userId: string, onSessionExpired: () => void, depen
     } finally {
       if (pending === controller) pending = undefined
     }
+  }
+
+  async function restartSetup(noSavedPasskey: boolean) {
+    if (!noSavedPasskey || destroyed || pending || !current.canRestartSetup || current.draft || current.wallets.length) return
+    const controller = new AbortController()
+    pending = controller
+    setState({ ...current, status: 'loading', message: null })
+    try {
+      await deps.lock(async () => {
+        if (destroyed || pending !== controller) return
+        deps.context()
+        const response = await fetch(`${env.BACKEND_URL.replace(/\/+$/, '')}/wallet`, { credentials: 'include', signal: controller.signal })
+        if (destroyed || pending !== controller) return
+        if (response.status === 401) {
+          setState({ status: 'expired', wallets: [], message: null, draft: null, openedWalletId: null })
+          onSessionExpired()
+          return
+        }
+        if (response.status === 200) {
+          const data: unknown = await response.json()
+          if (destroyed || pending !== controller) return
+          if (!data || typeof data !== 'object' || !('wallet' in data) || !isWallet(data.wallet, userId)) throw new Error('Invalid wallet response')
+          setState({ ...current, status: 'ready', wallets: [data.wallet], message: 'A wallet is already registered. Use its existing passkey to recover it; setup was not reset.' })
+          return
+        }
+        if (response.status !== 404) throw new Error('Wallet absence was not confirmed')
+        // Re-read inside the creation lock, after the API check: another tab may have saved a credential.
+        if (current.draft || !hasInterruptedMarker()) throw new Error('Saved passkey data changed')
+        deps.storage.removeItem(storageKey)
+        uncertain = false
+        prepared = undefined
+        setState({ ...current, status: 'idle', message: 'The interrupted setup marker was cleared. You can now create your wallet. No passkey or wallet was deleted.' })
+      })
+    } catch {
+      if (!destroyed && pending === controller) setState({ ...current, status: 'error', canRestartSetup: false,
+        message: 'Setup could not be restarted safely. Your browser data was kept. Close other setup tabs, check your session and connection, then refresh.' })
+    } finally { if (pending === controller) pending = undefined }
   }
 
   function reopenError(error: unknown, controller: AbortController) {
@@ -260,6 +312,7 @@ export function createWallet(userId: string, onSessionExpired: () => void, depen
     create: () => current.status === 'idle' ? request(false, true) : request(true),
     reopen,
     confirmReopen,
+    restartSetup,
     cancel() {
       const controller = pending ?? reopening?.controller
       if (destroyed || !controller) return

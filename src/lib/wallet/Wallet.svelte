@@ -7,11 +7,13 @@
   let { userId, onSessionExpired }: { userId: string; onSessionExpired: () => void } = $props()
   const wallet = untrack(() => createWallet(userId, onSessionExpired))
   let heading = $state<HTMLHeadingElement>()
+  let noSavedPasskey = $state(false)
   const busy = $derived(['creating', 'loading', 'opening', 'verifying'].includes($wallet.status))
 
   $effect(() => {
     if (!busy) heading?.focus()
   })
+  $effect(() => { if (!$wallet.canRestartSetup) noSavedPasskey = false })
 
   onMount(() => { void wallet.restore() })
   onDestroy(() => wallet.destroy())
@@ -101,6 +103,19 @@
 
   {#if $wallet.draft && !$wallet.wallets.length}
     <p class="rounded-lg border p-4 text-sm">Your public passkey settings are saved in this browser for retry. Keep this browser data until registration succeeds. Refresh and resume to reuse the same passkey.</p>
+  {/if}
+
+  {#if $wallet.canRestartSetup}
+    <section aria-labelledby="restart-setup-title" class="space-y-4 rounded-2xl border bg-card p-6">
+      <h2 id="restart-setup-title" class="text-xl">Resume an interrupted setup</h2>
+      <p class="text-sm">Unlock and sync Bitwarden. Look for a Whirm wallet passkey for app.whirm.dev. If you find one, keep it and ask the team to recover it. Do not restart setup.</p>
+      <label class="flex items-start gap-3 text-sm">
+        <input type="checkbox" bind:checked={noSavedPasskey} class="mt-1" />
+        <span>I checked my synced Bitwarden vault: no Whirm wallet passkey was saved for this account.</span>
+      </label>
+      <Button disabled={!noSavedPasskey || busy} onclick={() => wallet.restartSetup(noSavedPasskey)}>Restart wallet setup</Button>
+      <p class="text-sm text-muted-foreground">We check again that no wallet is registered before clearing only the interrupted request marker. This does not create a passkey automatically.</p>
+    </section>
   {/if}
 
   <div class="flex flex-wrap gap-3">
