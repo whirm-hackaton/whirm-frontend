@@ -2,6 +2,7 @@
   import { onDestroy, onMount, tick, type Snippet } from 'svelte'
   import swissquoteLogo from '../../assets/swissquote-logo.svg'
   import { Button } from '$lib/components/ui/button'
+  import { Spinner } from '$lib/components/ui/spinner'
   import { createAuth, type AuthSession } from './auth'
 
   let { onSessionChange, children }: {
@@ -72,9 +73,7 @@
 </svelte:head>
 
 {#snippet feedback()}
-  {#if $auth.status === 'checking' || $auth.status === 'connecting' || $auth.status === 'disconnecting'}
-    <p role="status" class="notice">{$auth.status === 'checking' ? 'Checking your session…' : $auth.status === 'disconnecting' ? 'Signing out…' : mode === 'signup' ? 'Creating your account…' : 'Signing in…'}</p>
-  {:else if $auth.status === 'refused'}
+  {#if $auth.status === 'refused'}
     <p role="alert" class="notice notice-error">Check your email and password, then try again.</p>
   {:else if $auth.status === 'expired'}
     <p role="alert" class="notice notice-pending">Your session has expired. Sign in again to continue.</p>
@@ -99,7 +98,12 @@
               <p class="max-w-48 truncate text-muted-foreground">{session.email}</p>
             {/if}
           </div>
-          <Button variant="outline" size="sm" disabled={busy} onclick={() => auth.disconnect()}>{$auth.status === 'disconnecting' ? 'Signing out…' : 'Sign out'}</Button>
+          <Button variant="outline" size="sm" disabled={busy} aria-busy={$auth.status === 'disconnecting'} onclick={() => auth.disconnect()}>
+            {#if $auth.status === 'disconnecting'}
+              <Spinner aria-label="Signing out" />
+            {/if}
+            Sign out
+          </Button>
         </div>
       {/if}
     </div>
@@ -107,7 +111,7 @@
 
   <main id="main-content" tabindex="-1" class="page-container app-main flex-1">
     {#if session}
-      {#if $auth.status === 'error' || $auth.status === 'disconnecting'}
+      {#if $auth.status === 'error'}
         <div class="mb-6">{@render feedback()}</div>
       {/if}
       {#if children}
@@ -144,8 +148,11 @@
             <p class="text-sm text-muted-foreground">This account is separate from your Bitwarden vault and its master password.</p>
           {/if}
           {@render feedback()}
-          <Button type="submit" class="w-full" disabled={busy}>
-            {$auth.status === 'checking' ? 'Checking session…' : mode === 'signup' ? $auth.status === 'connecting' ? 'Creating account…' : 'Create account' : $auth.status === 'connecting' ? 'Signing in…' : 'Sign in'}
+          <Button type="submit" class="w-full" disabled={busy} aria-busy={busy}>
+            {#if busy}
+              <Spinner aria-label={$auth.status === 'checking' ? 'Checking session' : mode === 'signup' ? 'Creating account' : 'Signing in'} />
+            {/if}
+            {mode === 'signup' ? 'Create account' : 'Sign in'}
           </Button>
         </form>
         <div class="mt-4 flex flex-wrap items-center justify-center gap-x-2 text-sm">

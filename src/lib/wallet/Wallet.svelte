@@ -1,12 +1,14 @@
 <script lang="ts">
   import { onDestroy, onMount, tick, untrack } from 'svelte'
   import { Button } from '$lib/components/ui/button'
+  import { Spinner } from '$lib/components/ui/spinner'
   import { createWallet } from './wallet'
   import Transfer from './Transfer.svelte'
 
   let { userId, onSessionExpired }: { userId: string; onSessionExpired: () => void } = $props()
   const wallet = untrack(() => createWallet(userId, onSessionExpired))
   let transactionActive = $state(false)
+  let refreshing = $state(false)
   let noSavedPasskey = $state(false)
   let messageRegion = $state<'creation' | 'opening' | 'details'>('details')
   let creationTitle = $state<HTMLHeadingElement>()
@@ -16,7 +18,8 @@
   let refreshButton = $state<HTMLButtonElement | HTMLAnchorElement | null>(null)
   const busy = $derived(['creating', 'loading', 'opening', 'verifying'].includes($wallet.status))
   const opening = $derived(['opening', 'awaiting-passkey', 'verifying'].includes($wallet.status))
-  const refreshDisabled = $derived(busy || opening || transactionActive)
+  const refreshLoading = $derived(refreshing || $wallet.status === 'loading')
+  const refreshDisabled = $derived(refreshLoading || busy || opening || transactionActive)
 
   async function create() {
     messageRegion = 'creation'
@@ -47,10 +50,16 @@
     else refreshButton?.focus()
   }
 
-  function refresh() {
+  async function refresh() {
     if (refreshDisabled) return
+    refreshing = true
     messageRegion = 'details'
-    void wallet.restore()
+    try {
+      await Promise.all([
+        wallet.restore(),
+        new Promise<void>((resolve) => setTimeout(resolve, 400)),
+      ])
+    } finally { refreshing = false }
   }
 
   async function restartSetup() {
@@ -83,7 +92,7 @@
   {#if !$wallet.wallets.length}
     <div class="surface-panel p-4 md:p-6">
       {#if $wallet.status === 'loading'}
-        <p role="status" class="text-muted-foreground">Loading your saved wallet…</p>
+        <Spinner class="size-6 text-muted-foreground" aria-label="Loading saved wallet" />
       {:else}
         <p class="max-w-2xl text-muted-foreground">Connect your personal Bitwarden vault, then save a passkey for this wallet.</p>
         <ol class="mt-6 max-w-2xl space-y-6">
@@ -124,8 +133,6 @@
         <div class="mt-6" aria-busy={$wallet.status === 'creating'}>
           {#if $wallet.status === 'confirming'}
             <p role="status" class="notice mb-4">No wallet is registered yet. Continue to {$wallet.draft ? 'reuse your saved passkey.' : 'save a passkey in Bitwarden.'}</p>
-          {:else if $wallet.status === 'creating'}
-            <p role="status" class="notice mb-4">Preparing and saving your passkey wallet…</p>
           {/if}
           {#if $wallet.draft}
             <p class="notice mb-4">Your public passkey settings are saved in this browser for retry. Keep this browser data until registration succeeds. Refresh and resume to reuse the same passkey.</p>
@@ -145,15 +152,21 @@
           {/if}
           <div class="action-row mt-4">
             {#if !$wallet.canRestartSetup}
-              <Button disabled={$wallet.status !== 'idle' && $wallet.status !== 'confirming'} onclick={create}>
+              <Button disabled={$wallet.status !== 'idle' && $wallet.status !== 'confirming'} aria-busy={$wallet.status === 'creating'} onclick={create}>
+                {#if $wallet.status === 'creating'}
+                  <Spinner aria-label="Creating wallet" />
+                {/if}
                 {$wallet.status === 'confirming' ? $wallet.draft ? 'Continue with saved passkey' : 'Save passkey in Bitwarden' : $wallet.draft ? 'Resume wallet creation' : 'Create wallet'}
               </Button>
             {/if}
             {#if $wallet.status === 'creating'}
               <Button variant="outline" onclick={cancel}>Cancel creation</Button>
             {/if}
-            {#if ['error', 'cancelled'].includes($wallet.status)}
-              <Button bind:ref={refreshButton} variant="outline" disabled={refreshDisabled} onclick={refresh}>Refresh wallet details</Button>
+            {#if ['error', 'cancelled'].includes($wallet.status) || refreshing}
+              <Button bind:ref={refreshButton} variant="outline" disabled={refreshDisabled} aria-busy={refreshLoading} onclick={refresh}>
+                {#if refreshLoading}<Spinner aria-label="Refreshing wallet details" />{/if}
+                Refresh wallet details
+              </Button>
             {/if}
           </div>
         </div>
@@ -179,9 +192,12 @@
         <p class="mt-4 text-sm text-muted-foreground">Calculated smart account address. Deployment has not been checked.</p>
       </details>
       <div class="mt-4">
-        <Button bind:ref={refreshButton} variant="outline" disabled={refreshDisabled} onclick={refresh}>{$wallet.status === 'loading' ? 'Refreshing wallet details…' : 'Refresh wallet details'}</Button>
-        {#if transactionActive}<p class="mt-2 text-sm text-muted-foreground">Finish the transfer before refreshing wallet details.</p>{/if}
-        {#if $wallet.status === 'loading'}<p role="status" class="mt-2 text-sm text-muted-foreground">Refreshing saved metadata. Your current wallet remains visible.</p>{/if}
+        <Button bind:ref={refreshButton} variant="outline" disabled={refreshDisabled} aria-busy={refreshLoading} onclick={refresh}>
+          {#if refreshLoading}
+            <Spinner aria-label="Refreshing wallet details" />
+          {/if}
+          Refresh wallet details
+        </Button>
         {#if messageRegion === 'details'}{@render feedback()}{/if}
       </div>
 
@@ -191,15 +207,18 @@
           <p class="mt-2 max-w-2xl text-sm text-muted-foreground">Use your existing passkey. Opening does not create a replacement wallet or authorize a transfer.</p>
           {#if $wallet.status === 'awaiting-passkey'}
             <p class="mt-4 max-w-2xl text-sm text-muted-foreground">Unlock and sync the same Bitwarden vault configured with <span class="break-all">https://vault.whirm.dev</span>, then continue.</p>
-          {:else if opening}
-            <p role="status" class="notice mt-4">{$wallet.status === 'opening' ? 'Loading your registered wallet…' : 'Checking your existing passkey and wallet address…'}</p>
           {/if}
           {#if messageRegion === 'opening'}{@render feedback()}{/if}
           <div class="action-row mt-4">
             {#if $wallet.status === 'awaiting-passkey'}
               <Button onclick={confirmOpening}>Continue with passkey</Button>
             {:else}
-              <Button bind:ref={openButton} disabled={busy || transactionActive} onclick={() => open(metadata.id)}>{opening ? 'Opening wallet…' : 'Open wallet'}</Button>
+              <Button bind:ref={openButton} disabled={busy || transactionActive} aria-busy={opening} onclick={() => open(metadata.id)}>
+                {#if opening}
+                  <Spinner aria-label={$wallet.status === 'verifying' ? 'Verifying passkey' : 'Opening wallet'} />
+                {/if}
+                Open wallet
+              </Button>
             {/if}
             {#if opening}<Button variant="outline" onclick={cancel}>Cancel opening</Button>{/if}
           </div>

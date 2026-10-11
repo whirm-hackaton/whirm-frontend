@@ -481,12 +481,46 @@ test('a late initial balance lookup cannot overwrite the refreshed post-transfer
   }
   const transfer = createTransfer(prepared, f.deps)
   const initial = transfer.refreshBalance()
+  assert.equal(get(transfer).balanceLoading, true)
   await transfer.prepare(recipient, '0.00001')
+  assert.equal(get(transfer).balanceLoading, false)
   await transfer.confirm()
   assert.equal(get(transfer).balance, 900_000_000_000_000n)
   finish(1_000_000_000_000_000n)
   await initial
   assert.equal(get(transfer).balance, 900_000_000_000_000n)
+  assert.equal(get(transfer).balanceLoading, false)
+})
+
+test('balance loading tracks the latest request and clears after success or failure', async () => {
+  const f = fixture()
+  const requests: { resolve: (balance: bigint) => void; reject: (error: Error) => void }[] = []
+  f.deps.balance = () => new Promise((resolve, reject) => { requests.push({ resolve, reject }) })
+  const transfer = createTransfer(prepared, f.deps)
+  assert.equal(get(transfer).balanceLoading, false)
+  const first = transfer.refreshBalance()
+  const latest = transfer.refreshBalance()
+  assert.equal(get(transfer).balanceLoading, true)
+  requests[0]!.resolve(1n)
+  await first
+  assert.equal(get(transfer).balanceLoading, true)
+  assert.equal(get(transfer).balance, null)
+  requests[1]!.resolve(2n)
+  await latest
+  assert.equal(get(transfer).balanceLoading, false)
+  assert.equal(get(transfer).balance, 2n)
+  const failed = transfer.refreshBalance()
+  assert.equal(get(transfer).balanceLoading, true)
+  requests[2]!.reject(new Error('offline'))
+  await failed
+  assert.equal(get(transfer).balanceLoading, false)
+  assert.match(get(transfer).balanceMessage ?? '', /Unable to load/)
+  const retry = transfer.refreshBalance()
+  assert.equal(get(transfer).balanceMessage, null)
+  requests[3]!.resolve(3n)
+  await retry
+  assert.equal(get(transfer).balanceLoading, false)
+  assert.equal(get(transfer).balance, 3n)
 })
 
 test('an old receipt lookup cannot erase a newer pending marker created by another tab', async () => {

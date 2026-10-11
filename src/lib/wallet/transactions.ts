@@ -13,6 +13,7 @@ type Quote = { recipient: Address; amount: string; value: bigint; maxFee: bigint
 export type TransferState = {
   status: 'idle' | 'preparing' | 'review' | 'signing' | 'sending' | 'pending' | 'success' | 'failed' | 'error' | 'cancelled'
   balance: bigint | null
+  balanceLoading: boolean
   balanceMessage: string | null
   message: string | null
   quote: Quote | null
@@ -91,7 +92,7 @@ export function createTransfer(prepared: PreparedPasskey, dependencies?: Transfe
     },
     unavailable: networkUnavailableReason,
   }
-  let current: TransferState = { status: 'idle', balance: null, balanceMessage: null, message: null, quote: null, funding: null, submission: null, receipt: null, checking: false }
+  let current: TransferState = { status: 'idle', balance: null, balanceLoading: false, balanceMessage: null, message: null, quote: null, funding: null, submission: null, receipt: null, checking: false }
   const state = writable(current)
   let controller: AbortController | undefined
   let attempt: { account: Account; send: (operation: Operation) => Promise<Hex>; receipt: (hash: Hex) => Promise<UserOperationReceipt<'0.6'>> } | undefined
@@ -103,7 +104,7 @@ export function createTransfer(prepared: PreparedPasskey, dependencies?: Transfe
   }
   function checkFunding(value: bigint, maxFee: bigint | null, balance: bigint) {
     balanceRequest++
-    update({ balance, balanceMessage: null, funding: { value, maxFee, balance } })
+    update({ balance, balanceLoading: false, balanceMessage: null, funding: { value, maxFee, balance } })
     if (value > balance) throw new TransferError('The amount exceeds your balance. Send a smaller amount or add funds to your wallet. Your balance must also cover network fees.')
     if (maxFee !== null && value + maxFee > balance) throw new TransferError('Your balance must cover the amount and network fees. Send a smaller amount or add funds to your wallet.')
   }
@@ -124,8 +125,10 @@ export function createTransfer(prepared: PreparedPasskey, dependencies?: Transfe
   async function refreshBalance() {
     if (destroyed) return
     const request = ++balanceRequest
+    update({ balanceLoading: true, balanceMessage: null })
     try { const balance = await deps.balance(prepared.address); if (!destroyed && request === balanceRequest) update({ balance, balanceMessage: null }) }
     catch { if (!destroyed && request === balanceRequest) update({ balanceMessage: 'Unable to load the Base Sepolia balance. Try refreshing.' }) }
+    finally { if (!destroyed && request === balanceRequest) update({ balanceLoading: false }) }
   }
 
   async function checkReceipt() {

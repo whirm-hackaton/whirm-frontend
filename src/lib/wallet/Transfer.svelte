@@ -2,6 +2,7 @@
   import { onDestroy, onMount, tick, untrack } from 'svelte'
   import { formatEther, parseEther } from 'viem'
   import { Button } from '$lib/components/ui/button'
+  import { Spinner } from '$lib/components/ui/spinner'
   import { createTransfer } from './transactions'
   import { formatEth } from './format'
   import { networkUnavailableReason } from './network'
@@ -24,12 +25,13 @@
   const copyErrorMessage = 'Copy failed. Copy the address above.'
   let copyMessage = $state('')
   let copyFailed = $state(false)
+  let copyBusy = $state(false)
   const locked = $derived(['preparing', 'review', 'signing', 'sending', 'pending'].includes($transfer.status))
   const busy = $derived(['preparing', 'signing', 'sending'].includes($transfer.status))
   const stage = $derived(newTransfer ? 'form' : ['review', 'signing'].includes($transfer.status) ? 'review'
     : ['sending', 'pending'].includes($transfer.status) ? 'pending'
     : ['success', 'failed'].includes($transfer.status) ? 'result' : 'form')
-  const heading = $derived(stage === 'review' ? 'Send' : stage === 'pending' ? ($transfer.status === 'sending' ? 'Sending transfer' : 'Waiting for confirmation')
+  const heading = $derived(stage === 'review' ? 'Send' : stage === 'pending' ? 'Transfer'
     : stage === 'result' ? ($transfer.status === 'success' ? 'Transfer confirmed' : 'Transfer not confirmed') : 'Send ETH')
   const fundingTotal = $derived($transfer.funding?.maxFee == null ? null : $transfer.funding.value + $transfer.funding.maxFee)
   const shortfall = $derived($transfer.funding?.balance == null ? null
@@ -62,6 +64,9 @@
   }
 
   async function copyRecipient(address: string) {
+    if (copyBusy) return
+    copyBusy = true
+    copyMessage = ''
     try {
       await navigator.clipboard.writeText(address)
       copyFailed = false
@@ -69,7 +74,7 @@
     } catch {
       copyFailed = true
       copyMessage = copyErrorMessage
-    }
+    } finally { copyBusy = false }
   }
 
   function startNewTransfer() {
@@ -85,14 +90,22 @@
   })
 </script>
 
-<section lang="en" aria-labelledby="transfer-title" class="mt-6 max-w-[640px] space-y-6 border-t pt-6" aria-busy={busy}>
+<section lang="en" aria-labelledby="transfer-title" class="mt-6 max-w-[640px] space-y-6 border-t pt-6" aria-busy={busy || $transfer.checking}>
   {#if stage === 'form'}
     <div class="flex flex-wrap items-center justify-between gap-4">
       <div class="min-w-0">
         <p class="text-sm text-muted-foreground">Available balance</p>
-        <p class="balance-value break-all tabular-nums">{$transfer.balance === null ? 'Not loaded' : `${formatEther($transfer.balance)} ETH`}</p>
+        <p class="balance-value break-all tabular-nums" aria-busy={$transfer.balanceLoading}>
+          {#if $transfer.balanceLoading}<Spinner class="size-6" aria-label="Loading balance" />
+          {:else}{$transfer.balance === null ? 'Not loaded' : `${formatEther($transfer.balance)} ETH`}{/if}
+        </p>
       </div>
-      <Button variant="outline" disabled={busy} onclick={() => { if (!busy) void transfer.refreshBalance() }}>Refresh balance</Button>
+      <Button variant="outline" disabled={busy || $transfer.balanceLoading} aria-busy={$transfer.balanceLoading} onclick={() => { if (!busy && !$transfer.balanceLoading) void transfer.refreshBalance() }}>
+        {#if $transfer.balanceLoading}
+          <Spinner aria-label="Refreshing balance" />
+        {/if}
+        Refresh balance
+      </Button>
     </div>
     {#if $transfer.balanceMessage}<p role="status" class="notice">{$transfer.balanceMessage}</p>{/if}
   {/if}
@@ -111,9 +124,13 @@
         <input id="transfer-amount" bind:this={amountInput} bind:value={amount} required disabled={locked || !!unavailable || metadataRefreshing} inputmode="decimal" autocomplete="off" aria-describedby="amount-help" class="field-input" placeholder="0.00001" />
         <p id="amount-help" class="text-sm text-muted-foreground">Use a decimal point, with up to 18 decimal places. Keep enough ETH for network fees.</p>
       </div>
-      {#if metadataRefreshing}<p role="status" class="notice">Wait for wallet details to finish refreshing before sending.</p>{/if}
       <div class="action-row">
-        <Button type="submit" class="w-full sm:w-auto" disabled={locked || !!unavailable || metadataRefreshing}>{$transfer.status === 'preparing' ? 'Preparing transfer…' : 'Send'}</Button>
+        <Button type="submit" class="w-full sm:w-auto" disabled={locked || !!unavailable || metadataRefreshing} aria-busy={$transfer.status === 'preparing' || metadataRefreshing}>
+          {#if $transfer.status === 'preparing' || metadataRefreshing}
+            <Spinner aria-label={metadataRefreshing ? 'Refreshing wallet details' : 'Preparing transfer'} />
+          {/if}
+          Send
+        </Button>
         {#if $transfer.status === 'preparing'}<Button variant="outline" onclick={cancelTransfer}>Cancel</Button>{/if}
       </div>
     </form>
@@ -124,7 +141,12 @@
       <div class="financial-primary"><dt>Amount to send</dt><dd class="amount-value">{formatEth($transfer.quote.value)}</dd></div>
     </dl>
     <div class="flex flex-col items-start gap-1">
-      <Button variant="outline" size="sm" onclick={() => copyRecipient($transfer.quote!.recipient)}>Copy recipient address</Button>
+      <Button variant="outline" size="sm" disabled={copyBusy} aria-busy={copyBusy} onclick={() => copyRecipient($transfer.quote!.recipient)}>
+        {#if copyBusy}
+          <Spinner aria-label="Copying recipient address" />
+        {/if}
+        Copy recipient address
+      </Button>
       <div class="grid w-full text-sm">
         <!-- Reserve both messages before copying, including when enlarged text wraps. -->
         <span aria-hidden="true" class="invisible col-start-1 row-start-1">{copySuccessMessage}</span>
@@ -147,7 +169,12 @@
     </details>
     <p class="text-sm text-muted-foreground">Check the recipient, amount and network. Confirm this transfer in the window that opens.</p>
     <div class="action-row">
-      <Button disabled={$transfer.status !== 'review' || metadataRefreshing} onclick={() => { if (!metadataRefreshing && $transfer.status === 'review') void transfer.confirm() }}>{$transfer.status === 'signing' ? 'Waiting for your confirmation…' : 'Confirm and send'}</Button>
+      <Button disabled={$transfer.status !== 'review' || metadataRefreshing} aria-busy={$transfer.status === 'signing' || metadataRefreshing} onclick={() => { if (!metadataRefreshing && $transfer.status === 'review') void transfer.confirm() }}>
+        {#if $transfer.status === 'signing' || metadataRefreshing}
+          <Spinner aria-label={metadataRefreshing ? 'Refreshing wallet details' : 'Waiting for passkey confirmation'} />
+        {/if}
+        Confirm and send
+      </Button>
       <Button variant="outline" onclick={cancelTransfer}>Cancel</Button>
     </div>
   {:else if $transfer.submission}
@@ -179,7 +206,10 @@
     </details>
   {/if}
 
-  {#if $transfer.message && !newTransfer}
+  {#if stage === 'pending'}
+    <Spinner class="size-6 text-muted-foreground" aria-label={$transfer.status === 'sending' ? 'Sending transfer' : 'Waiting for transfer confirmation'} />
+  {/if}
+  {#if $transfer.message && !newTransfer && !busy && !$transfer.checking}
     <p role={['error', 'failed'].includes($transfer.status) ? 'alert' : 'status'} class={['error', 'failed'].includes($transfer.status) ? 'notice notice-error' : $transfer.status === 'success' ? 'notice notice-success' : ['sending', 'pending'].includes($transfer.status) ? 'notice notice-pending' : 'notice'}>{$transfer.message}</p>
   {/if}
   {#if stage === 'form' && $transfer.status === 'error' && $transfer.funding}
@@ -212,12 +242,22 @@
   {/if}
   {#if stage === 'pending' && $transfer.status === 'pending'}
     <div class="action-row">
-      <Button variant="outline" disabled={$transfer.checking} onclick={() => transfer.checkReceipt()}>{$transfer.checking ? 'Checking receipt…' : 'Check receipt'}</Button>
+      <Button variant="outline" disabled={$transfer.checking} aria-busy={$transfer.checking} onclick={() => transfer.checkReceipt()}>
+        {#if $transfer.checking}
+          <Spinner aria-label="Checking receipt" />
+        {/if}
+        Check receipt
+      </Button>
       <a class="text-link text-sm" href={`https://sepolia.basescan.org/address/${prepared.address}`} target="_blank" rel="noreferrer">View wallet activity</a>
     </div>
   {/if}
   {#if stage === 'result'}
-    <Button variant="outline" disabled={$transfer.checking} onclick={startNewTransfer}>New transfer</Button>
+    <Button variant="outline" disabled={$transfer.checking} aria-busy={$transfer.checking} onclick={startNewTransfer}>
+      {#if $transfer.checking}
+        <Spinner aria-label="Updating transfer result" />
+      {/if}
+      New transfer
+    </Button>
   {/if}
 </section>
 
