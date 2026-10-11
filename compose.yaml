@@ -8,7 +8,7 @@ services:
         WALLET_ORIGIN: ${WALLET_ORIGIN:?Set WALLET_ORIGIN in Dokploy Environment}
         WALLET_RP_ID: ${WALLET_RP_ID:?Set WALLET_RP_ID in Dokploy Environment}
         BASE_SEPOLIA_RPC_URL: ${BASE_SEPOLIA_RPC_URL:?Set BASE_SEPOLIA_RPC_URL in Dokploy Environment}
-        BUNDLER_PROXY_URL: ${BUNDLER_PROXY_URL:-}
+        BUNDLER_URL: ${BUNDLER_URL:-}
     restart: unless-stopped
     expose:
       - "80"

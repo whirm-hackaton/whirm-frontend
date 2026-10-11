@@ -50,7 +50,7 @@ The API permits one wallet per user. A `GET /wallet` response with status `404` 
 
 ## Verification
 
-For the optional authenticated bundler relay and isolated HS-11 checks, see [network configuration](network.md). `BUNDLER_PROXY_URL` defaults to blank so auth/passkey tests remain independent of the relay.
+For optional direct Pimlico access and isolated HS-11 checks, see [network configuration](network.md). `BUNDLER_URL` defaults to blank so auth/passkey tests remain independent of the bundler. Banking session cookies apply only to the banking API; Pimlico requests omit credentials.
 
 No additional test dependency is needed. Export the four public values from `.env` before running Node tests (Vite loads them automatically). For localhost:
 

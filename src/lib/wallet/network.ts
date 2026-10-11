@@ -14,26 +14,24 @@ class NetworkError extends Error {}
 
 export const publicClient = createPublicClient({
   chain: baseSepolia,
-  transport: http(env.BASE_SEPOLIA_RPC_URL, { retryCount: 0, timeout: 15_000 }),
+  transport: http(env.BASE_SEPOLIA_RPC_URL, { fetchOptions: { credentials: 'omit' }, retryCount: 0, timeout: 15_000 }),
 })
 
-export function proxyUnavailableReason(proxyUrl: string, backendUrl: string): string | null {
-  if (!proxyUrl) return 'The wallet relay is not configured. Transfers are unavailable.'
+export function walletServiceUnavailableReason(serviceUrl: string): string | null {
+  if (!serviceUrl) return 'The wallet service is not configured. Transfers are unavailable.'
   try {
-    const proxy = new URL(proxyUrl)
-    const backend = new URL(backendUrl)
-    if (proxy.origin !== backend.origin || proxy.username || proxy.password || proxy.search || proxy.hash
-      || (proxy.protocol !== 'https:' && !(proxy.protocol === 'http:' && proxy.hostname === 'localhost'))) {
-      return 'The wallet relay must use the secure banking API origin without URL credentials or query parameters.'
+    const service = new URL(serviceUrl)
+    if (service.protocol !== 'https:' || service.username || service.password || service.search || service.hash) {
+      return 'The wallet service must use a public HTTPS URL without credentials, query parameters or a fragment.'
     }
     return null
   } catch {
-    return 'The wallet relay URL is invalid. Transfers are unavailable.'
+    return 'The wallet service URL is invalid. Transfers are unavailable.'
   }
 }
 
 export function networkUnavailableReason() {
-  return proxyUnavailableReason(env.BUNDLER_PROXY_URL, env.BACKEND_URL)
+  return walletServiceUnavailableReason(env.BUNDLER_URL)
 }
 
 export async function createPrefundedBundler(account: Awaited<ReturnType<typeof toPasskeyAccount>>) {
@@ -42,12 +40,14 @@ export async function createPrefundedBundler(account: Awaited<ReturnType<typeof 
   if (account.entryPoint.version !== '0.6' || account.entryPoint.address.toLowerCase() !== entryPoint06Address.toLowerCase()) {
     throw new NetworkError('This wallet requires the Coinbase EntryPoint 0.6 configuration. Sending is blocked.')
   }
-  const transport = http(env.BUNDLER_PROXY_URL, {
-    fetchOptions: { credentials: 'include' }, retryCount: 0, timeout: 15_000,
+  const transport = http(env.BUNDLER_URL, {
+    fetchOptions: { credentials: 'omit' }, retryCount: 0, timeout: 15_000,
   })
   const pimlico = createClient({ chain: baseSepolia, transport, rpcSchema: rpcSchema<PimlicoRpcSchema>() })
   const bundler = createBundlerClient({
     account, client: publicClient, transport,
+    // The public endpoint allows 20 requests/minute/IP; leave room for preparation and submission.
+    pollingInterval: 6_000,
     userOperation: {
       async estimateFeesPerGas() {
         const result = await pimlico.request({ method: 'pimlico_getUserOperationGasPrice', params: [] })
@@ -85,8 +85,8 @@ export function networkError(error: unknown, submittedHash?: Hex): string {
   const messages: string[] = []
   let cause: unknown = error
   for (let depth = 0; depth < 10 && cause && typeof cause === 'object'; depth++) {
-    if ('status' in cause && cause.status === 401) return 'Your bank session expired. Sign in again before sending.'
-    if ('status' in cause && cause.status === 429) return 'The wallet relay is busy. Wait before trying again.'
+    if ('status' in cause && (cause.status === 401 || cause.status === 403)) return 'The wallet service refused access. Check its public endpoint configuration.'
+    if ('status' in cause && cause.status === 429) return 'The wallet service rate limit was reached. Wait before trying again.'
     if ('message' in cause && typeof cause.message === 'string') messages.push(cause.message)
     cause = 'cause' in cause ? cause.cause : null
   }
