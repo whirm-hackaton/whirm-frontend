@@ -9,13 +9,13 @@ The frontend prepares a Coinbase Smart Account on Base Sepolia with one P-256 We
 ## User journey
 
 1. Sign in with the bank account and load saved wallet metadata.
-2. Prepare a personal vault using the integrated **Create a personal vault** form or choose an existing vault. Install the official Bitwarden extension or mobile client. Use the self-hosted server https://vault.whirm.dev and the same personal vault on each device. Enable Bitwarden for passkeys, unlock and sync it, then confirm **My vault is ready** before creating the wallet.
+2. Prepare a personal vault at https://vault.whirm.dev, choose a master password there, and install the official Bitwarden extension or mobile client. Use the self-hosted server https://vault.whirm.dev and the same personal vault on each device. Enable Bitwarden for passkeys, unlock and sync it.
 3. **Create my wallet** refreshes the API to prevent creating over an existing wallet. **Save my passkey in Bitwarden** is a separate direct user click, preserving browser activation for WebAuthn.
 4. Create a discoverable ES256 credential with user verification required, attestation `none`, and no authenticator attachment restriction. The frontend receives only the credential ID and public key.
 5. Persist the public credential before any RPC call. Compute the address from one WebAuthn owner, fixed account version and fixed creation nonce, then send only address and chain ID to PUT /wallet.
 6. Show the registered candidate and its calculated address. Registration is not deployment or proof of control. Creation does not submit a transaction or deploy an account.
 
-The optional vault-registration form handles a new master password locally in the browser; only its authentication verifier and encrypted vault keys are relayed to Vaultwarden. The wallet/passkey flow never requests the vault's master password or private wallet key. See [Integrated vault registration](vault-registration.md) for the protocol and trust boundary; Whirm does not unlock the vault or log into it.
+No master password, vault secret, private key or seed is requested, stored, sent or logged. Vault registration does not happen through the bank application.
 
 ## Stable context and SDK parameters
 
