@@ -77,7 +77,6 @@
 <section lang="en" aria-labelledby="wallet-title">
   <div class="mb-8 flex flex-wrap items-center justify-between gap-4 md:mb-12">
     <h1 id="wallet-title" class="display-title">{$wallet.wallets.length ? 'Your wallet' : 'Create your wallet'}</h1>
-    <span class="network-badge">Base Sepolia · Testnet</span>
   </div>
 
   {#if !$wallet.wallets.length}

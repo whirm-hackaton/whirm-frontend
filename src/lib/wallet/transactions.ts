@@ -140,7 +140,7 @@ export function createTransfer(prepared: PreparedPasskey, dependencies?: Transfe
       const success = receipt.success && receipt.receipt.status === 'success'
       // Another tab may have resolved this operation and started a newer one while this lookup waited.
       if (savedSubmission()?.hash === submission.hash) deps.storage.removeItem(key)
-      update({ receipt, status: success ? 'success' : 'failed', message: success ? 'Transfer confirmed successfully on Base Sepolia.' : 'The operation was included but failed. The ETH transfer was not confirmed; network fees may have been charged.' })
+      update({ receipt, status: success ? 'success' : 'failed', message: success ? 'Transfer confirmed on Base Sepolia.' : 'The transfer failed on the network. Network fees may have been charged.' })
       await refreshBalance()
     } catch { update({ status: 'pending', message: 'The outcome is still unknown. Check the receipt again or inspect the explorer. Do not send the transfer again.' }) }
     finally { update({ checking: false }) }
@@ -164,11 +164,11 @@ export function createTransfer(prepared: PreparedPasskey, dependencies?: Transfe
       checkFunding(details.value, null, initialBalance)
       const account = await deps.account(prepared, next.signal)
       next.signal.throwIfAborted()
-      if (account.address.toLowerCase() !== prepared.address.toLowerCase()) throw new TransferError('The passkey account does not match this wallet.')
+      if (account.address.toLowerCase() !== prepared.address.toLowerCase()) throw new TransferError('The saved settings do not match this wallet. Reopen it and try again.')
       const quoted = await deps.quote(account, details.recipient, details.value)
       next.signal.throwIfAborted()
       const operation = quoted.operation
-      if (operation.sender.toLowerCase() !== prepared.address.toLowerCase() || (operation.paymasterAndData && operation.paymasterAndData !== '0x')) throw new TransferError('The operation does not match the prefunded account.')
+      if (operation.sender.toLowerCase() !== prepared.address.toLowerCase() || (operation.paymasterAndData && operation.paymasterAndData !== '0x')) throw new TransferError('The transfer settings do not match this wallet. Sending is blocked.')
       const maxFee = (operation.callGasLimit + operation.verificationGasLimit + operation.preVerificationGas) * operation.maxFeePerGas
       if (maxFee <= 0n) throw new TransferError('A valid network fee estimate is unavailable. Sending is blocked. Try reviewing the transfer again.')
       update({ funding: { value: details.value, balance: initialBalance, maxFee } })
@@ -188,7 +188,7 @@ export function createTransfer(prepared: PreparedPasskey, dependencies?: Transfe
     const quote = current.quote
     const signing = attempt
     const active = controller
-    update({ status: 'signing', message: 'Authorize this exact transfer with your passkey.' })
+    update({ status: 'signing', message: 'Confirm this transfer in the window that opens.' })
     try {
       // Keep signing first: mobile providers require the confirmation click's user activation.
       const signature = await signing.account.signUserOperation({ ...quote.operation, chainId: 84532 })
@@ -202,30 +202,30 @@ export function createTransfer(prepared: PreparedPasskey, dependencies?: Transfe
         if (existing) { update({ status: 'pending', submission: existing, message: 'Another submission needs a receipt check before sending.' }); return }
         const balance = await deps.balance(prepared.address).catch((error: unknown) => {
           throw error instanceof TransferError ? error
-            : new TransferError('The Base Sepolia RPC could not verify your balance. No operation was submitted. Check your connection and review the transfer again.')
+            : new TransferError('Unable to verify your Base Sepolia balance. No transfer was sent. Check your connection and try again.')
         })
         active.signal.throwIfAborted()
         checkFunding(quote.value, quote.maxFee, balance)
         const submission = { hash, recipient: quote.recipient, amount: quote.amount }
         deps.storage.setItem(key, JSON.stringify(submission))
-        update({ status: 'sending', submission, message: 'Submitting the signed operation. It can no longer be cancelled safely.' })
+        update({ status: 'sending', submission, message: 'Sending your transfer. It can no longer be cancelled.' })
         try {
           const returnedHash = await signing.send(operation)
           if (returnedHash.toLowerCase() !== hash.toLowerCase()) throw new Error('Bundler returned an unexpected hash')
-          update({ status: 'pending', message: 'Operation submitted. Waiting for its execution receipt…' })
+          update({ status: 'pending', message: 'Transfer sent. Waiting for network confirmation…' })
         } catch (error) {
           if (submissionRejected(error)) {
             deps.storage.removeItem(key)
-            update({ status: 'failed', message: 'The bundler rejected this operation before acceptance. No transfer was confirmed. Review the recipient, balance and fees before trying again.' })
-          } else update({ status: 'pending', message: 'Submission has an uncertain result. Keep the operation hash and check its receipt before sending again.' })
+            update({ status: 'failed', message: 'The network service refused this transfer. No transfer was confirmed. Check the recipient, balance and fees before trying again.' })
+          } else update({ status: 'pending', message: 'The transfer outcome is unknown. Check its status before sending again.' })
         }
       })
       if (current.submission && !destroyed) await checkReceipt()
     } catch (error) {
       if (!destroyed && controller === active) update({ status: passkeyRequestRejected(error) ? 'cancelled' : 'error', message: passkeyRequestRejected(error)
-        ? 'Passkey authorization cancelled or refused. No operation was submitted.'
+        ? 'Confirmation cancelled or refused. No transfer was sent.'
         : error instanceof TransferError ? error.message
-          : 'Unable to authorize or save this transfer. No operation was submitted. Review it again before retrying.' })
+          : 'Unable to confirm or save this transfer. No transfer was sent. Check it again before retrying.' })
     }
   }
 
