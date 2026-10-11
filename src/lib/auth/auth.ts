@@ -23,9 +23,9 @@ export function createAuth() {
   let pendingRestore = false
   let destroyed = false
 
-  async function request(action: 'restore' | 'connect' | 'disconnect', credentials?: { email: string; password: string }) {
+  async function request(action: 'restore' | 'connect' | 'signup' | 'disconnect', credentials?: { email: string; password: string; displayName?: string }) {
     if (destroyed) return
-    if (action === 'connect' && current.session) return
+    if ((action === 'connect' || action === 'signup') && current.session) return
     if (action === 'disconnect' && !current.session) return
     if (pending) {
       if (action !== 'disconnect' || !pendingRestore) return
@@ -50,13 +50,13 @@ export function createAuth() {
 
     setState({
       status: action === 'restore' ? (session ? 'connected' : 'checking')
-        : action === 'connect' ? 'connecting' : 'disconnecting',
+        : action === 'connect' || action === 'signup' ? 'connecting' : 'disconnecting',
       session,
       message: null,
     })
 
     try {
-      const endpoint = action === 'restore' ? 'me' : action === 'connect' ? 'login' : 'logout'
+      const endpoint = action === 'restore' ? 'me' : action === 'connect' ? 'login' : action === 'signup' ? 'signup' : 'logout'
       const response = await fetch(`${backendUrl}/auth/${endpoint}`, {
         method: action === 'restore' ? 'GET' : 'POST',
         credentials: 'include',
@@ -77,6 +77,10 @@ export function createAuth() {
         setState({ status: 'refused', session: null, message: 'Incorrect email or password.' })
         return
       }
+      if (action === 'signup' && response.status === 409) {
+        fail('This email is already registered. Sign in instead.')
+        return
+      }
       if (action === 'disconnect' && response.status === 204) {
         setState({ status: 'disconnected', session: null, message: null })
         return
@@ -85,11 +89,13 @@ export function createAuth() {
         fail(response.status >= 500
           ? 'The sign-in service is unavailable. Please try again.'
           : response.status === 400
-            ? 'The sign-in details are invalid.'
+            ? action === 'signup'
+              ? 'Check your name and email. Your password must contain 8 to 1024 characters.'
+              : 'The sign-in details are invalid.'
             : 'The server refused this request. Please try again.')
         return
       }
-      if (action === 'disconnect' || response.status !== 200) {
+      if (action === 'disconnect' || response.status !== (action === 'signup' ? 201 : 200)) {
         fail(invalidResponseMessage)
         return
       }
@@ -120,7 +126,15 @@ export function createAuth() {
     subscribe: state.subscribe,
     restore: () => request('restore'),
     connect: (email: string, password: string) => request('connect', { email, password }),
+    signup: (email: string, password: string, displayName: string) => request('signup', {
+      email: email.trim().toLowerCase(), password, displayName: displayName.trim(),
+    }),
     disconnect: () => request('disconnect'),
+    clearFeedback() {
+      if (destroyed || pending || current.session) return
+      current = { status: 'disconnected', session: null, message: null }
+      state.set(current)
+    },
     expire() {
       if (destroyed) return
       pending?.abort()

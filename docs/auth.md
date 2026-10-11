@@ -2,6 +2,12 @@
 
 `Auth` manages sign-in, sign-out and sessions through the backend. It remains independent of the wallet.
 
+## Create an account
+
+Select **New to Whirm? Sign up**, enter a display name (1–150 characters after trimming), a valid email (up to 255 characters), and a password of **8–1024 characters**. The backend does not require uppercase letters, numbers or symbols. The form displays these requirements, uses new-password autofill and clears the password after submission or changing modes.
+
+`POST /auth/signup` receives `{ email, password, displayName }`, returns **201** with `{ user }` and sets the session cookie. The frontend immediately opens the signed-in wallet journey. Email is trimmed/lowercased and name is trimmed; the password is never trimmed. An existing email (409), invalid details (400), forbidden origin and service/network errors produce messages without authenticating. This creates a bank application account; the personal Bitwarden vault and its master password are created separately.
+
 ## Local setup
 
 Start the backend and its database. Use **localhost** for both services:
@@ -34,6 +40,7 @@ pnpm dev
 | Action          | Endpoint                                      | Result                                         |
 |-----------------|-----------------------------------------------|------------------------------------------------|
 | Sign in         | `POST /auth/login` with `{ email, password }` | `200`: user; `401`: refused                    |
+| Sign up         | `POST /auth/signup` with `{ email, password, displayName }` | `201`: user and session; `400`: invalid; `409`: email exists |
 | Restore session | `GET /auth/me`                                | `200`: user; `401`: missing or expired session |
 | Sign out        | `POST /auth/logout`                           | `204`: session revoked, cookie cleared         |
 
