@@ -2,6 +2,7 @@
   import { onDestroy, onMount, untrack } from 'svelte'
   import { Button } from '$lib/components/ui/button'
   import { createWallet } from './wallet'
+  import Transfer from './Transfer.svelte'
 
   let { userId, onSessionExpired }: { userId: string; onSessionExpired: () => void } = $props()
   const wallet = untrack(() => createWallet(userId, onSessionExpired))
@@ -86,6 +87,11 @@
           <dd>{metadata.verifiedAt ?? 'Not verified'}</dd>
         </div>
       </dl>
+      {#if $wallet.openedWalletId === metadata.id && $wallet.openedPasskey}
+        {#key $wallet.openedPasskey}
+          <Transfer prepared={$wallet.openedPasskey} />
+        {/key}
+      {/if}
       <Button class="mt-6" size="lg" disabled={busy || $wallet.status === 'awaiting-passkey'} onclick={() => wallet.reopen(metadata.id)}>Recover my wallet</Button>
     </div>
   {/each}
