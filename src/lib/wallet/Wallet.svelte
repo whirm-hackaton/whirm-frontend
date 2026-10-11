@@ -30,6 +30,14 @@
   <p class="rounded-lg border bg-accent p-4 text-sm text-accent-foreground">
     The smart account address is calculated on Base Sepolia. Creating a passkey does not deploy the account or verify your bank association. Spending requires a fresh passkey signature validated on-chain.
   </p>
+  <details class="rounded-lg border bg-card p-4">
+    <summary class="cursor-pointer font-semibold">Access after changing devices</summary>
+    <div class="mt-3 space-y-3 text-sm text-muted-foreground">
+      <p>Recovering your wallet uses your existing passkey. Check that the wallet address and Base Sepolia network match your original wallet before sending.</p>
+      <p>Syncing Bitwarden or recovering on another device does not revoke the old device's access. Closing its browser or signing out of Whirm does not remove its passkey.</p>
+      <p>Any device still able to use that passkey may authorize spending. This demo has no wallet passkey revocation or replacement flow. Losing access to your entire vault is a different recovery scenario.</p>
+    </div>
+  </details>
 
   {#if !$wallet.wallets.length}
     <div class="space-y-4 rounded-2xl border bg-card p-6">
