@@ -1,20 +1,24 @@
 # Dokploy deployment (HS-43)
 
-Deploy this repository as a separate **Application** alongside Vaultwarden. The frontend origin is `https://app.whirm.dev`; its public API is `https://api.whirm.dev`. The vault stays at `https://vault.whirm.dev`.
+Deploy this repository as a separate **Docker Compose** service alongside Vaultwarden. The frontend origin is `https://app.whirm.dev`; its public API is `https://api.whirm.dev`. The vault stays at `https://vault.whirm.dev`.
+
+## Services
+
+This stack creates only `frontend`: the production Svelte/Vite bundle served by Nginx on internal port 80. The banking API at api.whirm.dev and the vault at vault.whirm.dev are existing services, managed separately. No database, second API, Vaultwarden instance or HTTPS proxy is created here; Dokploy's proxy provides HTTPS.
 
 ## Source and build
 
+- Create/select **Docker Compose**, in **Compose** mode (not Docker Stack: this file builds an image).
 - GitHub repository: `whirm-hackaton/whirm-frontend`.
-- Branch: `main`; repository/build context: `.`.
-- Build type: **Dockerfile**; Dockerfile path: `Dockerfile`.
-- Docker build stage: leave empty to use the final static Nginx image.
-- Domain container port: **80**.
+- Branch: `main`; Compose Path: `compose.yaml` (or `./compose.yaml`).
+- Compose service: **frontend**; domain container port: **80**.
+- The Compose file calls the existing Dockerfile; no separate Application build settings are needed.
 
 The Dockerfile uses Node 24, installs the locked dependencies with pnpm, runs `pnpm check` and `pnpm build`, and copies only `dist/` into the runtime image. Nginx serves the SPA and supports direct reloads of client routes. Do not use `pnpm dev` or `pnpm preview` as the production server.
 
-## Build Time Arguments
+## Environment
 
-In **Environment → Build Time Arguments**, paste:
+In the Compose service's **Environment** tab, paste and save:
 
 ```dotenv
 BACKEND_URL=https://api.whirm.dev
@@ -23,7 +27,7 @@ WALLET_RP_ID=app.whirm.dev
 BASE_SEPOLIA_RPC_URL=https://sepolia.base.org
 ```
 
-All four values are public and embedded in the browser bundle. They are **build arguments**, not merely runtime environment variables. Rebuild/redeploy after a change. Missing arguments fail the build. Never add a privileged service key, vault password or private wallet key here.
+All four values are public and embedded in the browser bundle. The Compose file interpolates them into Dockerfile **build arguments**, so they reach Vite during the build rather than only at container startup. Rebuild/redeploy after a change. Missing arguments fail the build. Never add a privileged service key, vault password or private wallet key here.
 
 ## DNS and HTTPS
 
@@ -32,6 +36,7 @@ Point the `app.whirm.dev` DNS record to the VPS. In **Domains**, set:
 | Field | Value |
 |---|---|
 | Host | app.whirm.dev |
+| Service | frontend |
 | Path | / |
 | Internal Path | empty |
 | Strip Path | disabled |
@@ -39,7 +44,7 @@ Point the `app.whirm.dev` DNS record to the VPS. In **Domains**, set:
 | HTTPS | enabled |
 | Certificate | letsencrypt |
 
-Save and deploy. Dokploy's proxy terminates HTTPS; Nginx listens on internal HTTP port 80. Vaultwarden uses a separate service/domain and its existing volume.
+Save the domain and use **Preview Compose** to inspect Dokploy's generated labels and network. Redeploy after changing a Compose domain. Dokploy's proxy terminates HTTPS; Nginx listens on internal HTTP port 80. Vaultwarden uses a separate service/domain and its existing volume.
 
 ## Backend configuration
 
@@ -69,7 +74,8 @@ Record the deployed commit, versions, URL, actual test results and public transa
 
 ## References
 
-- [Dokploy Dockerfile builds and build arguments](https://docs.dokploy.com/docs/core/applications/build-type)
+- [Dokploy Compose](https://docs.dokploy.com/docs/core/docker-compose)
+- [Dokploy Compose domains](https://docs.dokploy.com/docs/core/docker-compose/domains)
 - [Authentication and cookies](auth.md)
 - [Passkey creation](wallet.md)
 - [Existing passkey reopening](passkey-reopening.md)
