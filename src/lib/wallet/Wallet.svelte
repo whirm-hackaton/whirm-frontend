@@ -11,6 +11,7 @@
   let messageRegion = $state<'creation' | 'opening' | 'details'>('details')
   let creationTitle = $state<HTMLHeadingElement>()
   let accessTitle = $state<HTMLHeadingElement>()
+  let transferRegion = $state<HTMLDivElement>()
   let openButton = $state<HTMLButtonElement | HTMLAnchorElement | null>(null)
   let refreshButton = $state<HTMLButtonElement | HTMLAnchorElement | null>(null)
   const busy = $derived(['creating', 'loading', 'opening', 'verifying'].includes($wallet.status))
@@ -35,7 +36,7 @@
   async function confirmOpening() {
     await wallet.confirmReopen()
     await tick()
-    if ($wallet.openedWalletId) accessTitle?.focus()
+    if ($wallet.openedWalletId && $wallet.openedPasskey) transferRegion?.focus()
   }
 
   async function cancel() {
@@ -185,16 +186,23 @@
         {#if messageRegion === 'details'}{@render feedback()}{/if}
       </div>
 
-      <div class="mt-6 border-t pt-6" aria-busy={opening && $wallet.status !== 'awaiting-passkey'}>
-        <h2 bind:this={accessTitle} tabindex="-1" class="section-title">{$wallet.openedWalletId === metadata.id ? 'Wallet open' : $wallet.status === 'awaiting-passkey' ? 'Continue with your passkey' : 'Open your wallet'}</h2>
-        <p class="mt-2 max-w-2xl text-sm text-muted-foreground">{$wallet.openedWalletId === metadata.id ? 'Your passkey matches this wallet. Opening does not verify a bank association or authorize spending.' : 'Use your existing passkey. Opening does not create a replacement wallet or authorize a transfer.'}</p>
-        {#if $wallet.openedWalletId !== metadata.id}
-          {#if $wallet.status === 'awaiting-passkey'}
-            <p class="mt-4 max-w-2xl text-sm text-muted-foreground">Unlock and sync the same Bitwarden vault configured with <span class="break-all">https://vault.whirm.dev</span>, then continue.</p>
-          {:else if opening}
-            <p role="status" class="notice mt-4">{$wallet.status === 'opening' ? 'Loading your registered wallet…' : 'Checking your existing passkey and wallet address…'}</p>
-          {/if}
-          {#if messageRegion === 'opening'}{@render feedback()}{/if}
+      {#if $wallet.openedWalletId !== metadata.id || !$wallet.openedPasskey}
+        <div class="mt-6 border-t pt-6" aria-busy={opening && $wallet.status !== 'awaiting-passkey'}>
+          <h2 bind:this={accessTitle} tabindex="-1" class="section-title">Open your wallet</h2>
+          <p class="mt-2 max-w-2xl text-sm text-muted-foreground">Use your existing passkey. Opening does not create a replacement wallet or authorize a transfer.</p>
+          <div class="notice mt-4 flex min-h-40 items-start sm:min-h-28" class:notice-error={messageRegion === 'opening' && $wallet.status === 'error'}>
+            <p role={messageRegion === 'opening' && $wallet.status === 'error' ? 'alert' : 'status'}>
+              {#if $wallet.status === 'awaiting-passkey'}
+                Unlock and sync the same Bitwarden vault configured with <span class="break-all">https://vault.whirm.dev</span>, then continue.
+              {:else if opening}
+                {$wallet.status === 'opening' ? 'Loading your registered wallet…' : 'Checking your existing passkey and wallet address…'}
+              {:else if messageRegion === 'opening' && $wallet.message}
+                {$wallet.message}
+              {:else}
+                Select Open wallet to continue with your saved passkey.
+              {/if}
+            </p>
+          </div>
           <div class="action-row mt-4">
             {#if $wallet.status === 'awaiting-passkey'}
               <Button onclick={confirmOpening}>Continue with passkey</Button>
@@ -203,12 +211,14 @@
             {/if}
             {#if opening}<Button variant="outline" onclick={cancel}>Cancel opening</Button>{/if}
           </div>
-        {/if}
-      </div>
+        </div>
+      {/if}
 
       {#if $wallet.openedWalletId === metadata.id && $wallet.openedPasskey}
         {#key $wallet.openedPasskey}
-          <Transfer prepared={$wallet.openedPasskey} metadataRefreshing={$wallet.status === 'loading'} onActivityChange={(active) => transactionActive = active} />
+          <div bind:this={transferRegion} tabindex="-1" role="region" aria-label="Wallet transfers">
+            <Transfer prepared={$wallet.openedPasskey} metadataRefreshing={$wallet.status === 'loading'} onActivityChange={(active) => transactionActive = active} />
+          </div>
         {/key}
       {/if}
     </div>
