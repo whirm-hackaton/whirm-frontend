@@ -1,5 +1,17 @@
 <script lang="ts">
   import { onDestroy, onMount, tick, untrack } from 'svelte'
+  import Send from '@lucide/svelte/icons/send'
+  import Fingerprint from '@lucide/svelte/icons/fingerprint'
+  import RefreshCw from '@lucide/svelte/icons/refresh-cw'
+  import Copy from '@lucide/svelte/icons/copy'
+  import X from '@lucide/svelte/icons/x'
+  import Pencil from '@lucide/svelte/icons/pencil'
+  import Plus from '@lucide/svelte/icons/plus'
+  import ReceiptText from '@lucide/svelte/icons/receipt-text'
+  import ExternalLink from '@lucide/svelte/icons/external-link'
+  import CircleCheck from '@lucide/svelte/icons/circle-check'
+  import CircleAlert from '@lucide/svelte/icons/circle-alert'
+  import Clock from '@lucide/svelte/icons/clock'
   import { formatEther, parseEther } from 'viem'
   import { Button } from '$lib/components/ui/button'
   import { Spinner } from '$lib/components/ui/spinner'
@@ -103,6 +115,8 @@
       <Button variant="outline" disabled={busy || $transfer.balanceLoading} aria-busy={$transfer.balanceLoading} onclick={() => { if (!busy && !$transfer.balanceLoading) void transfer.refreshBalance() }}>
         {#if $transfer.balanceLoading}
           <Spinner aria-label="Refreshing balance" />
+        {:else}
+          <RefreshCw aria-hidden="true" />
         {/if}
         Refresh balance
       </Button>
@@ -110,7 +124,17 @@
     {#if $transfer.balanceMessage}<p role="status" class="notice">{$transfer.balanceMessage}</p>{/if}
   {/if}
 
-  <h2 id="transfer-title" tabindex="-1" bind:this={stageHeading} class="section-title">{heading}</h2>
+  <h2 id="transfer-title" tabindex="-1" bind:this={stageHeading} class="section-title flex items-center gap-3">
+    {#if stage === 'result'}
+      {#if $transfer.status === 'success'}<CircleCheck class="size-6 shrink-0 text-[var(--success)]" aria-hidden="true" />
+      {:else}<CircleAlert class="size-6 shrink-0 text-destructive" aria-hidden="true" />{/if}
+    {:else if stage === 'pending'}
+      <Clock class="size-6 shrink-0 text-[var(--pending)]" aria-hidden="true" />
+    {:else}
+      <Send class="size-6 shrink-0 text-primary" aria-hidden="true" />
+    {/if}
+    {heading}
+  </h2>
 
   {#if stage === 'form'}
     {#if unavailable}<p role="status" class="notice">{unavailable}</p>{/if}
@@ -128,10 +152,12 @@
         <Button type="submit" class="w-full sm:w-auto" disabled={locked || !!unavailable || metadataRefreshing} aria-busy={$transfer.status === 'preparing' || metadataRefreshing}>
           {#if $transfer.status === 'preparing' || metadataRefreshing}
             <Spinner aria-label={metadataRefreshing ? 'Refreshing wallet details' : 'Preparing transfer'} />
+          {:else}
+            <Send aria-hidden="true" />
           {/if}
           Send
         </Button>
-        {#if $transfer.status === 'preparing'}<Button variant="outline" onclick={cancelTransfer}>Cancel</Button>{/if}
+        {#if $transfer.status === 'preparing'}<Button variant="outline" onclick={cancelTransfer}><X aria-hidden="true" />Cancel</Button>{/if}
       </div>
     </form>
   {:else if stage === 'review' && $transfer.quote}
@@ -144,6 +170,8 @@
       <Button variant="outline" size="sm" disabled={copyBusy} aria-busy={copyBusy} onclick={() => copyRecipient($transfer.quote!.recipient)}>
         {#if copyBusy}
           <Spinner aria-label="Copying recipient address" />
+        {:else}
+          <Copy aria-hidden="true" />
         {/if}
         Copy recipient address
       </Button>
@@ -172,10 +200,12 @@
       <Button disabled={$transfer.status !== 'review' || metadataRefreshing} aria-busy={$transfer.status === 'signing' || metadataRefreshing} onclick={() => { if (!metadataRefreshing && $transfer.status === 'review') void transfer.confirm() }}>
         {#if $transfer.status === 'signing' || metadataRefreshing}
           <Spinner aria-label={metadataRefreshing ? 'Refreshing wallet details' : 'Waiting for passkey confirmation'} />
+        {:else}
+          <Fingerprint aria-hidden="true" />
         {/if}
         Confirm and send
       </Button>
-      <Button variant="outline" onclick={cancelTransfer}>Cancel</Button>
+      <Button variant="outline" onclick={cancelTransfer}><X aria-hidden="true" />Cancel</Button>
     </div>
   {:else if $transfer.submission}
     <dl class="financial-summary">
@@ -183,7 +213,7 @@
       <div class="financial-primary"><dt>Amount requested</dt><dd class="amount-value">{formatEth(parseEther($transfer.submission.amount))}</dd></div>
       <div><dt>Network</dt><dd>Base Sepolia (84532)</dd></div>
       {#if $transfer.receipt}
-        <div><dt>Transaction</dt><dd><a class="text-link" href={`https://sepolia.basescan.org/tx/${$transfer.receipt.receipt.transactionHash}`} target="_blank" rel="noreferrer">View transaction on explorer</a></dd></div>
+        <div><dt>Transaction</dt><dd><a class="text-link inline-flex items-center gap-2" href={`https://sepolia.basescan.org/tx/${$transfer.receipt.receipt.transactionHash}`} target="_blank" rel="noreferrer">View transaction on explorer<ExternalLink class="size-4 shrink-0" aria-hidden="true" /></a></dd></div>
         <div><dt>Actual network fee</dt><dd>{formatEth($transfer.receipt.actualGasCost)}</dd></div>
         {#if $transfer.status === 'success'}
           <div class="financial-total"><dt>Actual total debited</dt><dd>{formatEth(parseEther($transfer.submission.amount) + $transfer.receipt.actualGasCost)}</dd></div>
@@ -228,8 +258,8 @@
         <p class="text-sm text-muted-foreground">No network fee estimate is available. Sending is blocked; fees are not assumed to be zero.</p>
       {/if}
       <div class="action-row">
-        <Button variant="outline" disabled={!!unavailable || metadataRefreshing} onclick={() => { amountInput?.focus(); amountInput?.select() }}>Edit amount</Button>
-        <Button variant="outline" aria-expanded={showFunding} aria-controls="wallet-funding" onclick={() => showFunding = !showFunding}>Add funds to wallet</Button>
+        <Button variant="outline" disabled={!!unavailable || metadataRefreshing} onclick={() => { amountInput?.focus(); amountInput?.select() }}><Pencil aria-hidden="true" />Edit amount</Button>
+        <Button variant="outline" aria-expanded={showFunding} aria-controls="wallet-funding" onclick={() => showFunding = !showFunding}><Plus aria-hidden="true" />Add funds to wallet</Button>
       </div>
       {#if showFunding}
         <div id="wallet-funding" class="notice space-y-2">
@@ -245,16 +275,20 @@
       <Button variant="outline" disabled={$transfer.checking} aria-busy={$transfer.checking} onclick={() => transfer.checkReceipt()}>
         {#if $transfer.checking}
           <Spinner aria-label="Checking receipt" />
+        {:else}
+          <ReceiptText aria-hidden="true" />
         {/if}
         Check receipt
       </Button>
-      <a class="text-link text-sm" href={`https://sepolia.basescan.org/address/${prepared.address}`} target="_blank" rel="noreferrer">View wallet activity</a>
+      <a class="text-link inline-flex items-center gap-2 text-sm" href={`https://sepolia.basescan.org/address/${prepared.address}`} target="_blank" rel="noreferrer">View wallet activity<ExternalLink class="size-4 shrink-0" aria-hidden="true" /></a>
     </div>
   {/if}
   {#if stage === 'result'}
     <Button variant="outline" disabled={$transfer.checking} aria-busy={$transfer.checking} onclick={startNewTransfer}>
       {#if $transfer.checking}
         <Spinner aria-label="Updating transfer result" />
+      {:else}
+        <Plus aria-hidden="true" />
       {/if}
       New transfer
     </Button>

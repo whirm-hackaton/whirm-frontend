@@ -1,5 +1,9 @@
 <script lang="ts">
   import { onDestroy, onMount, tick, type Snippet } from 'svelte'
+  import LogIn from '@lucide/svelte/icons/log-in'
+  import LogOut from '@lucide/svelte/icons/log-out'
+  import UserPlus from '@lucide/svelte/icons/user-plus'
+  import Fingerprint from '@lucide/svelte/icons/fingerprint'
   import swissquoteLogo from '../../assets/swissquote-logo.svg'
   import { Button } from '$lib/components/ui/button'
   import { Spinner } from '$lib/components/ui/spinner'
@@ -101,6 +105,8 @@
           <Button variant="outline" size="sm" disabled={busy} aria-busy={$auth.status === 'disconnecting'} onclick={() => auth.disconnect()}>
             {#if $auth.status === 'disconnecting'}
               <Spinner aria-label="Signing out" />
+            {:else}
+              <LogOut aria-hidden="true" />
             {/if}
             Sign out
           </Button>
@@ -122,6 +128,7 @@
       {/if}
     {:else}
       <section aria-labelledby="connection-title" class="auth-form-panel surface-panel" aria-busy={busy}>
+        <span class="icon-mark mb-4"><Fingerprint class="size-6" aria-hidden="true" /></span>
         <h1 id="connection-title" tabindex="-1" bind:this={formHeading} class="display-title">{mode === 'signup' ? 'Create account' : 'Sign in'}</h1>
         <p class="mt-3 text-muted-foreground">{mode === 'signup' ? 'Create your Whirm account to set up a wallet.' : 'Access your personal wallet.'}</p>
 
@@ -151,13 +158,20 @@
           <Button type="submit" class="w-full" disabled={busy} aria-busy={busy}>
             {#if busy}
               <Spinner aria-label={$auth.status === 'checking' ? 'Checking session' : mode === 'signup' ? 'Creating account' : 'Signing in'} />
+            {:else if mode === 'signup'}
+              <UserPlus aria-hidden="true" />
+            {:else}
+              <LogIn aria-hidden="true" />
             {/if}
             {mode === 'signup' ? 'Create account' : 'Sign in'}
           </Button>
         </form>
         <div class="mt-4 flex flex-wrap items-center justify-center gap-x-2 text-sm">
           <span class="text-muted-foreground">{mode === 'signup' ? 'Already have an account?' : 'New to Whirm?'}</span>
-          <button type="button" class="text-link inline-flex min-h-11 items-center" disabled={busy} onclick={switchMode}>{mode === 'signup' ? 'Sign in' : 'Create an account'}</button>
+          <button type="button" class="text-link inline-flex min-h-11 items-center gap-2" disabled={busy} onclick={switchMode}>
+            {#if mode === 'signup'}<LogIn class="size-4" aria-hidden="true" />{:else}<UserPlus class="size-4" aria-hidden="true" />{/if}
+            {mode === 'signup' ? 'Sign in' : 'Create an account'}
+          </button>
         </div>
       </section>
     {/if}

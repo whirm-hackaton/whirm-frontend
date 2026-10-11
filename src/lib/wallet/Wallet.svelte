@@ -1,5 +1,14 @@
 <script lang="ts">
   import { onDestroy, onMount, tick, untrack } from 'svelte'
+  import WalletIcon from '@lucide/svelte/icons/wallet'
+  import ShieldCheck from '@lucide/svelte/icons/shield-check'
+  import Puzzle from '@lucide/svelte/icons/puzzle'
+  import Fingerprint from '@lucide/svelte/icons/fingerprint'
+  import ExternalLink from '@lucide/svelte/icons/external-link'
+  import Info from '@lucide/svelte/icons/info'
+  import RefreshCw from '@lucide/svelte/icons/refresh-cw'
+  import RotateCcw from '@lucide/svelte/icons/rotate-ccw'
+  import X from '@lucide/svelte/icons/x'
   import { Button } from '$lib/components/ui/button'
   import { Spinner } from '$lib/components/ui/spinner'
   import { createWallet } from './wallet'
@@ -86,7 +95,10 @@
 
 <section lang="en" aria-labelledby="wallet-title">
   <div class="mb-8 flex flex-wrap items-center justify-between gap-4 md:mb-12">
-    <h1 id="wallet-title" class="display-title">{$wallet.wallets.length ? 'Your wallet' : 'Create your wallet'}</h1>
+    <h1 id="wallet-title" class="display-title flex items-center gap-3">
+      <span class="icon-mark"><WalletIcon class="size-6" aria-hidden="true" /></span>
+      {$wallet.wallets.length ? 'Your wallet' : 'Create your wallet'}
+    </h1>
   </div>
 
   {#if !$wallet.wallets.length}
@@ -97,15 +109,15 @@
         <p class="max-w-2xl text-muted-foreground">Connect your personal Bitwarden vault, then save a passkey for this wallet.</p>
         <ol class="mt-6 max-w-2xl space-y-6">
           <li class="flex gap-4">
-            <span aria-hidden="true" class="pt-1 font-semibold text-brand">01</span>
+            <span class="icon-mark"><ShieldCheck class="size-5" aria-hidden="true" /></span>
             <div class="min-w-0">
               <h2 class="text-lg font-semibold">Create your vault</h2>
               <p class="mt-2 text-muted-foreground">Create a personal vault account and choose a master password, or use your existing vault account.</p>
-              <a class="text-link mt-2 inline-flex min-h-11 items-center" href="https://vault.whirm.dev" target="_blank" rel="noopener noreferrer">Open vault (new tab)</a>
+              <a class="text-link mt-2 inline-flex min-h-11 items-center gap-2" href="https://vault.whirm.dev" target="_blank" rel="noopener noreferrer">Open vault (new tab)<ExternalLink class="size-4 shrink-0" aria-hidden="true" /></a>
             </div>
           </li>
           <li class="flex gap-4">
-            <span aria-hidden="true" class="pt-1 font-semibold text-brand">02</span>
+            <span class="icon-mark"><Puzzle class="size-5" aria-hidden="true" /></span>
             <div class="min-w-0">
               <h2 class="text-lg font-semibold">Connect Bitwarden</h2>
               <p class="mt-2 text-muted-foreground">Install the <a class="text-link" href="https://bitwarden.com/download/" target="_blank" rel="noopener noreferrer">Bitwarden extension or app</a>. Select a self-hosted server and enter <span class="break-all font-medium text-foreground">https://vault.whirm.dev</span>.</p>
@@ -113,7 +125,7 @@
             </div>
           </li>
           <li class="flex gap-4">
-            <span aria-hidden="true" class="pt-1 font-semibold text-brand">03</span>
+            <span class="icon-mark"><Fingerprint class="size-5" aria-hidden="true" /></span>
             <div class="min-w-0">
               <h2 tabindex="-1" bind:this={creationTitle} class="text-lg font-semibold">Save your passkey</h2>
               <p class="mt-2 text-muted-foreground">Unlock and sync Bitwarden, then create your wallet below. Choose Bitwarden when prompted to save the passkey.</p>
@@ -122,7 +134,7 @@
         </ol>
 
         <details class="details-panel mt-6">
-          <summary>About your vault and wallet</summary>
+          <summary><span class="inline-flex items-center gap-2 align-middle"><Info class="size-4 text-primary" aria-hidden="true" />About your vault and wallet</span></summary>
           <div class="space-y-3 text-sm text-muted-foreground">
             <p>Your vault account is separate from your Whirm account. Whirm never asks for or receives your master password, vault secrets or private key.</p>
             <p>The wallet uses its own origin and RP ID, separately from vault.whirm.dev. Connect the Bitwarden extension or app before creating your wallet.</p>
@@ -146,7 +158,7 @@
                 <input type="checkbox" bind:checked={noSavedPasskey} class="mt-1" />
                 <span>I checked my synced Bitwarden vault: no Whirm wallet passkey was saved for this account.</span>
               </label>
-              <Button disabled={!noSavedPasskey || busy} onclick={restartSetup}>Restart wallet setup</Button>
+              <Button disabled={!noSavedPasskey || busy} onclick={restartSetup}><RotateCcw aria-hidden="true" />Restart wallet setup</Button>
               <p class="text-sm text-muted-foreground">We check again that no wallet is registered before clearing only the interrupted request marker. This does not create a passkey automatically.</p>
             </section>
           {/if}
@@ -155,16 +167,18 @@
               <Button disabled={$wallet.status !== 'idle' && $wallet.status !== 'confirming'} aria-busy={$wallet.status === 'creating'} onclick={create}>
                 {#if $wallet.status === 'creating'}
                   <Spinner aria-label="Creating wallet" />
+                {:else}
+                  <Fingerprint aria-hidden="true" />
                 {/if}
                 {$wallet.status === 'confirming' ? $wallet.draft ? 'Continue with saved passkey' : 'Save passkey in Bitwarden' : $wallet.draft ? 'Resume wallet creation' : 'Create wallet'}
               </Button>
             {/if}
             {#if $wallet.status === 'creating'}
-              <Button variant="outline" onclick={cancel}>Cancel creation</Button>
+              <Button variant="outline" onclick={cancel}><X aria-hidden="true" />Cancel creation</Button>
             {/if}
             {#if ['error', 'cancelled'].includes($wallet.status) || refreshing}
               <Button bind:ref={refreshButton} variant="outline" disabled={refreshDisabled} aria-busy={refreshLoading} onclick={refresh}>
-                {#if refreshLoading}<Spinner aria-label="Refreshing wallet details" />{/if}
+                {#if refreshLoading}<Spinner aria-label="Refreshing wallet details" />{:else}<RefreshCw aria-hidden="true" />{/if}
                 Refresh wallet details
               </Button>
             {/if}
@@ -177,12 +191,12 @@
   {#each $wallet.wallets as metadata (metadata.id)}
     <div class="surface-panel p-4 md:p-6">
       <dl>
-        <dt class="text-sm text-muted-foreground">Wallet address</dt>
+        <dt class="flex items-center gap-2 text-sm text-muted-foreground"><WalletIcon class="size-4 text-primary" aria-hidden="true" />Wallet address</dt>
         <dd class="mt-2 break-all font-mono text-base leading-relaxed md:text-lg">{metadata.address}</dd>
       </dl>
 
       <details class="details-panel mt-6">
-        <summary>Wallet details</summary>
+        <summary><span class="inline-flex items-center gap-2 align-middle"><Info class="size-4 text-primary" aria-hidden="true" />Wallet details</span></summary>
         <dl class="grid gap-4 text-sm md:grid-cols-2">
           <div><dt class="text-muted-foreground">Association status</dt><dd class="mt-1 font-semibold capitalize">{metadata.status}</dd></div>
           <div><dt class="text-muted-foreground">Chain ID</dt><dd class="mt-1 font-semibold">{metadata.chainId}</dd></div>
@@ -195,6 +209,8 @@
         <Button bind:ref={refreshButton} variant="outline" disabled={refreshDisabled} aria-busy={refreshLoading} onclick={refresh}>
           {#if refreshLoading}
             <Spinner aria-label="Refreshing wallet details" />
+          {:else}
+            <RefreshCw aria-hidden="true" />
           {/if}
           Refresh wallet details
         </Button>
@@ -203,7 +219,7 @@
 
       {#if $wallet.openedWalletId !== metadata.id}
         <div class="mt-6 border-t pt-6" aria-busy={opening && $wallet.status !== 'awaiting-passkey'}>
-          <h2 bind:this={accessTitle} tabindex="-1" class="section-title">{$wallet.status === 'awaiting-passkey' ? 'Continue with your passkey' : 'Open your wallet'}</h2>
+          <h2 bind:this={accessTitle} tabindex="-1" class="section-title flex items-center gap-3"><Fingerprint class="size-6 shrink-0 text-primary" aria-hidden="true" />{$wallet.status === 'awaiting-passkey' ? 'Continue with your passkey' : 'Open your wallet'}</h2>
           <p class="mt-2 max-w-2xl text-sm text-muted-foreground">Use your existing passkey. Opening does not create a replacement wallet or authorize a transfer.</p>
           {#if $wallet.status === 'awaiting-passkey'}
             <p class="mt-4 max-w-2xl text-sm text-muted-foreground">Unlock and sync the same Bitwarden vault configured with <span class="break-all">https://vault.whirm.dev</span>, then continue.</p>
@@ -211,16 +227,18 @@
           {#if messageRegion === 'opening'}{@render feedback()}{/if}
           <div class="action-row mt-4">
             {#if $wallet.status === 'awaiting-passkey'}
-              <Button onclick={confirmOpening}>Continue with passkey</Button>
+              <Button onclick={confirmOpening}><Fingerprint aria-hidden="true" />Continue with passkey</Button>
             {:else}
               <Button bind:ref={openButton} disabled={busy || transactionActive} aria-busy={opening} onclick={() => open(metadata.id)}>
                 {#if opening}
                   <Spinner aria-label={$wallet.status === 'verifying' ? 'Verifying passkey' : 'Opening wallet'} />
+                {:else}
+                  <WalletIcon aria-hidden="true" />
                 {/if}
                 Open wallet
               </Button>
             {/if}
-            {#if opening}<Button variant="outline" onclick={cancel}>Cancel opening</Button>{/if}
+            {#if opening}<Button variant="outline" onclick={cancel}><X aria-hidden="true" />Cancel opening</Button>{/if}
           </div>
         </div>
       {/if}
