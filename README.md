@@ -46,6 +46,8 @@ docs/                  Detailed documentation
 
 ## Documentation
 
+[Dokploy deployment](docs/dokploy.md) describes the Dockerfile build, public build arguments, HTTPS domains and production session checks for `app.whirm.dev`.
+
 [Authentication](docs/auth.md) covers backend setup, session handling, tests and deployment requirements. For production, set `BACKEND_URL` before building, use HTTPS for both services, and keep them on the same site for SameSite=Lax cookies. Allow the frontend origin in backend `CORS_ORIGINS`.
 
 [Passkey wallets](docs/wallet.md) covers vault preparation, deterministic account settings, the address-only API contract, retries and validation limits. The passkey is created in the selected provider; no account is deployed by this flow.
