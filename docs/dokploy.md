@@ -76,8 +76,6 @@ Record the deployed commit, versions, URL, actual test results and public transa
 
 ## References
 
-The frontend Nginx image also relays the two fixed registration routes documented in [Integrated vault registration](vault-registration.md). Rebuild/redeploy the image when enabling the form; publishing only static assets leaves these routes unavailable. The vault must allow signup and return a registration token without mandatory email verification for this PoC. No admin token or new environment variable is needed. Never enable request-body logging for this relay.
-
 - [Dokploy Compose](https://docs.dokploy.com/docs/core/docker-compose)
 - [Dokploy Compose domains](https://docs.dokploy.com/docs/core/docker-compose/domains)
 - [Authentication and cookies](auth.md)

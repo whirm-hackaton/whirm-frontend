@@ -15,15 +15,6 @@ export default defineConfig(({ mode }) => {
     server: {
       port: 5173,
       strictPort: true,
-      proxy: {
-        // Development equivalent of the two fixed Nginx registration routes.
-        '^/vault-registration/(start|finish)$': {
-          target: 'https://vault.whirm.dev', changeOrigin: true, secure: true,
-          rewrite: (path) => path === '/vault-registration/start'
-            ? '/identity/accounts/register/send-verification-email'
-            : '/identity/accounts/register/finish',
-        },
-      },
     },
     resolve: {
       alias: {
