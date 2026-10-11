@@ -11,6 +11,7 @@
   let messageRegion = $state<'creation' | 'opening' | 'details'>('details')
   let creationTitle = $state<HTMLHeadingElement>()
   let accessTitle = $state<HTMLHeadingElement>()
+  let transferRegion = $state<HTMLDivElement>()
   let openButton = $state<HTMLButtonElement | HTMLAnchorElement | null>(null)
   let refreshButton = $state<HTMLButtonElement | HTMLAnchorElement | null>(null)
   const busy = $derived(['creating', 'loading', 'opening', 'verifying'].includes($wallet.status))
@@ -207,7 +208,9 @@
 
       {#if $wallet.openedWalletId === metadata.id && $wallet.openedPasskey}
         {#key $wallet.openedPasskey}
-          <Transfer prepared={$wallet.openedPasskey} metadataRefreshing={$wallet.status === 'loading'} onActivityChange={(active) => transactionActive = active} />
+          <div bind:this={transferRegion} tabindex="-1" role="region" aria-label="Wallet transfers">
+            <Transfer prepared={$wallet.openedPasskey} metadataRefreshing={$wallet.status === 'loading'} onActivityChange={(active) => transactionActive = active} />
+          </div>
         {/key}
       {/if}
     </div>
