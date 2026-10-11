@@ -34,11 +34,14 @@
   {#if !$wallet.wallets.length}
     <div class="space-y-4 rounded-2xl border bg-card p-6">
       <h2 class="text-2xl">Prepare my vault</h2>
+      <p>Create your personal vault on the vault website, then come back here to create your wallet.</p>
+      <Button href="https://vault.whirm.dev" target="_blank" rel="noopener noreferrer" size="lg">Open my vault (new tab)</Button>
       <ol class="list-decimal space-y-3 pl-5 text-muted-foreground">
-        <li>Create a personal account at <a class="underline" href="https://vault.whirm.dev" target="_blank" rel="noreferrer">vault.whirm.dev</a>. Choose your own master password inside the vault. Your vault account is separate from your bank account.</li>
+        <li>On the vault website, create a personal account and choose your master password. If you already have a vault account, use it again. Your vault account is separate from your Whirm account.</li>
         <li>Install the <a class="underline" href="https://bitwarden.com/download/" target="_blank" rel="noreferrer">official Bitwarden browser extension or mobile app</a>. Select a self-hosted server and enter https://vault.whirm.dev. Sign in to the same personal vault on each device.</li>
-        <li>Enable Bitwarden as your passkey provider, unlock and sync your vault, then choose Bitwarden in the browser or system prompt. The browser controls which providers are offered.</li>
+        <li>Unlock and sync Bitwarden, then return to this Whirm tab and select <strong>Create my wallet</strong>. Choose Bitwarden when prompted to save the passkey. On mobile, enable Bitwarden as your passkey provider first.</li>
       </ol>
+      <p class="text-sm">Signing in on the vault website does not sign in to the Bitwarden extension or app. Connect it separately before creating your wallet.</p>
       <p class="text-sm">The wallet uses its own origin and RP ID, separately from vault.whirm.dev. We never ask for or receive your master password, vault secrets or private key.</p>
     </div>
   {/if}

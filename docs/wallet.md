@@ -9,7 +9,7 @@ The frontend prepares a Coinbase Smart Account on Base Sepolia with one P-256 We
 ## User journey
 
 1. Sign in with the bank account and load saved wallet metadata.
-2. Prepare a personal vault at https://vault.whirm.dev, choose a master password there, and install the official Bitwarden extension or mobile client. Use the self-hosted server https://vault.whirm.dev and the same personal vault on each device. Enable Bitwarden for passkeys, unlock and sync it.
+2. Select **Open my vault (new tab)** to open https://vault.whirm.dev. Create a personal vault and choose the master password there, or use an existing account. Connect the official Bitwarden extension/mobile client separately to the self-hosted server https://vault.whirm.dev, using the same personal vault on each device. Enable passkeys, unlock and sync, then return to Whirm. Website sign-in alone does not connect the extension/app.
 3. **Create my wallet** refreshes the API to prevent creating over an existing wallet. **Save my passkey in Bitwarden** is a separate direct user click, preserving browser activation for WebAuthn.
 4. Create a discoverable ES256 credential with user verification required, attestation `none`, and no authenticator attachment restriction. The frontend receives only the credential ID and public key.
 5. Persist the public credential before any RPC call. Compute the address from one WebAuthn owner, fixed account version and fixed creation nonce, then send only address and chain ID to PUT /wallet.
