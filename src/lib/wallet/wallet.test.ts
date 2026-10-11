@@ -299,7 +299,8 @@ test('settled provider rejection allows retry; uncertain marker blocks new crede
   const wallet = createWallet(userId, noSessionExpiry, f.deps)
   await confirm(wallet)
   await wallet.create()
-  assert.equal(get(wallet).status, 'error')
+  assert.equal(get(wallet).status, 'idle')
+  assert.match(get(wallet).message!, /cancelled or unavailable.*try again/)
   assert.equal(f.saved.has(storageKey), false)
   await confirm(wallet)
   f.saved.set(storageKey, JSON.stringify({ registering: true }))
@@ -320,6 +321,61 @@ test('settled provider rejection allows retry; uncertain marker blocks new crede
   await denied.create()
   assert.match(get(denied).message!, /Browser storage/)
   denied.destroy()
+})
+
+test('wrapped cancellation clears only the attempt marker, survives reload, and retries only after user confirmation', async context => {
+  const f = fixture()
+  let attempts = 0
+  let preparations = 0
+  f.deps.register = async () => {
+    attempts++
+    if (attempts === 1) throw new Error('SDK wrapper', { cause: { name: 'NotAllowedError' } })
+    return credential
+  }
+  f.deps.prepare = async () => { preparations++; return { address: metadata.address, passkey } }
+  const fetch = context.mock.method(globalThis, 'fetch', async (_url: RequestInfo | URL, options?: RequestInit) => options?.method === 'PUT'
+    ? Response.json({ wallet: metadata }, { status: 201 }) : new Response(null, { status: 404 }))
+  const wallet = createWallet(userId, noSessionExpiry, f.deps)
+  await confirm(wallet)
+  await wallet.create()
+  assert.equal(get(wallet).status, 'idle')
+  assert.equal(f.saved.has(storageKey), false)
+  assert.equal(attempts, 1)
+  assert.equal(preparations, 0)
+  assert.equal(fetch.mock.calls.some(call => call.arguments[1]?.method === 'PUT'), false)
+  wallet.destroy()
+  const reloaded = createWallet(userId, noSessionExpiry, f.deps)
+  await reloaded.restore()
+  assert.equal(get(reloaded).status, 'idle')
+  assert.equal(attempts, 1)
+  await reloaded.create()
+  assert.equal(attempts, 1)
+  await reloaded.create()
+  assert.equal(attempts, 2)
+  assert.equal(get(reloaded).status, 'ready')
+  reloaded.destroy()
+})
+
+test('unknown creation failure stays blocked and a changed public draft is never deleted by cancellation cleanup', async context => {
+  context.mock.method(globalThis, 'fetch', async () => new Response(null, { status: 404 }))
+  for (const changedDraft of [false, true]) {
+    const f = fixture()
+    let attempts = 0
+    f.deps.register = async () => {
+      attempts++
+      if (changedDraft) f.saved.set(storageKey, JSON.stringify(credential))
+      throw changedDraft ? new DOMException('cancelled', 'NotAllowedError') : new Error('Provider outcome unknown')
+    }
+    const wallet = createWallet(userId, noSessionExpiry, f.deps)
+    await confirm(wallet)
+    await wallet.create()
+    assert.equal(get(wallet).status, 'error')
+    assert.match(get(wallet).message!, /uncertain result/)
+    assert.deepEqual(JSON.parse(f.saved.get(storageKey)!), changedDraft ? credential : { registering: true })
+    await wallet.create()
+    assert.equal(attempts, 1)
+    wallet.destroy()
+  }
 })
 
 test('restores API metadata, expires 401, and rejects foreign or invalid wallet responses', async (context) => {

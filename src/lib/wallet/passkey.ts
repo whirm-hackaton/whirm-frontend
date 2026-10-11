@@ -61,7 +61,12 @@ export async function createPasskey(userId: string, signal: AbortSignal): Promis
     rp: { id: context.rpId, name: 'Whirm wallet' },
     user: { id: new TextEncoder().encode(userId), name: userId, displayName: 'Whirm wallet' },
     authenticatorSelection: { residentKey: 'required', requireResidentKey: true, userVerification: 'required' },
-    createFn: (options) => navigator.credentials.create({ ...options, signal } as CredentialCreationOptions),
+    createFn: async (options) => {
+      const created = await navigator.credentials.create({ ...options, signal } as CredentialCreationOptions)
+      // Preserve the settled no-credential outcome before ox wraps it as a generic failure.
+      if (created === null) throw new DOMException('No passkey was returned.', 'NotAllowedError')
+      return created
+    },
   })
   const result = { ...context, credentialId: credential.id, publicKey: credential.publicKey }
   if (!isPasskeyCredential(result)) throw new Error('The provider returned an invalid P-256 passkey.')
@@ -133,8 +138,9 @@ export async function recoverPasskeyAccount(address: string, signal: AbortSignal
 
 export function passkeyRequestRejected(error: unknown) {
   let cause = error
-  for (let depth = 0; depth < 5 && cause instanceof Error; depth++) {
-    if (cause.name === 'NotAllowedError' || cause.name === 'AbortError') return true
+  // Browser/extension errors may come from another realm and fail instanceof Error.
+  for (let depth = 0; depth < 8 && typeof cause === 'object' && cause !== null; depth++) {
+    if ('name' in cause && (cause.name === 'NotAllowedError' || cause.name === 'AbortError')) return true
     if ('cause' in cause) cause = cause.cause
     else break
   }
