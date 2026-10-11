@@ -44,6 +44,75 @@ async function confirm(wallet: ReturnType<typeof createWallet>) {
   assert.equal(get(wallet).status, 'confirming')
 }
 
+test('confirmed empty vault and fresh API absence allow clearing only the interrupted marker before normal creation', async context => {
+  const f = fixture()
+  f.saved.set(storageKey, JSON.stringify({ registering: true }))
+  const fetch = context.mock.method(globalThis, 'fetch', async (_url: RequestInfo | URL, options?: RequestInit) => options?.method === 'PUT'
+    ? Response.json({ wallet: metadata }, { status: 201 }) : new Response(null, { status: 404 }))
+  const wallet = createWallet(userId, noSessionExpiry, f.deps)
+  await wallet.restore()
+  assert.equal(get(wallet).canRestartSetup, true)
+  await wallet.restartSetup(false)
+  assert.equal(fetch.mock.callCount(), 1)
+  assert.equal(f.saved.has(storageKey), true)
+  await wallet.restartSetup(true)
+  assert.equal(fetch.mock.callCount(), 2)
+  assert.equal(f.saved.has(storageKey), false)
+  assert.equal(get(wallet).status, 'idle')
+  assert.equal(f.registrations(), 0)
+  await confirm(wallet)
+  await wallet.create()
+  assert.equal(get(wallet).status, 'ready')
+  assert.equal(f.registrations(), 1)
+  wallet.destroy()
+})
+
+test('restart preserves data when a wallet exists, auth expires, API fails, lock is busy or another tab saves a credential', async context => {
+  for (const scenario of ['wallet', 'expired', 'server', 'invalid', 'race', 'lock'] as const) {
+    const f = fixture()
+    const marker = JSON.stringify({ registering: true })
+    f.saved.set(storageKey, marker)
+    let expired = 0
+    let calls = 0
+    context.mock.method(globalThis, 'fetch', async () => {
+      if (++calls === 1) return new Response(null, { status: 404 })
+      if (scenario === 'wallet') return Response.json({ wallet: metadata })
+      if (scenario === 'expired') return new Response(null, { status: 401 })
+      if (scenario === 'server') return new Response(null, { status: 500 })
+      if (scenario === 'invalid') return Response.json({ wallet: { ...metadata, userId: 'other' } })
+      f.saved.set(storageKey, JSON.stringify(credential))
+      return new Response(null, { status: 404 })
+    })
+    const wallet = createWallet(userId, () => { expired++ }, f.deps)
+    await wallet.restore()
+    if (scenario === 'lock') f.deps.lock = async () => { throw new Error('Busy lock') }
+    await wallet.restartSetup(true)
+    assert.equal(f.saved.get(storageKey), scenario === 'race' ? JSON.stringify(credential) : marker)
+    assert.equal(f.registrations(), 0)
+    assert.equal(expired, scenario === 'expired' ? 1 : 0)
+    if (scenario === 'wallet') assert.deepEqual(get(wallet).wallets, [metadata])
+    if (scenario === 'expired') assert.equal(get(wallet).status, 'expired')
+    wallet.destroy()
+    context.mock.restoreAll()
+  }
+})
+
+test('valid credentials, corrupt storage and unknown marker shapes never expose restart or erase browser data', async context => {
+  for (const raw of [JSON.stringify(credential), '{broken', JSON.stringify({ registering: true, other: 'data' }), JSON.stringify({ registering: false })]) {
+    const f = fixture()
+    f.saved.set(storageKey, raw)
+    context.mock.method(globalThis, 'fetch', async () => new Response(null, { status: 404 }))
+    const wallet = createWallet(userId, noSessionExpiry, f.deps)
+    await wallet.restore()
+    assert.equal(get(wallet).canRestartSetup, false)
+    await wallet.restartSetup(true)
+    assert.equal(f.saved.get(storageKey), raw)
+    assert.equal(f.registrations(), 0)
+    wallet.destroy()
+    context.mock.restoreAll()
+  }
+})
+
 test('reads one current-user wallet, treats GET 404 as absence, and never treats PUT 404 as success', async (context) => {
   const f = fixture()
   const fetch = context.mock.method(globalThis, 'fetch', async (url: string | URL | Request, options?: RequestInit) => {
