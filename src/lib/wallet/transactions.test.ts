@@ -3,9 +3,10 @@ import assert from 'node:assert/strict'
 import { test } from 'node:test'
 import { get } from 'svelte/store'
 import { createBundlerClient, entryPoint06Address, getUserOperationHash, type UserOperation, type UserOperationReceipt } from 'viem/account-abstraction'
-import { custom, type Hex } from 'viem'
+import { custom, parseEther, type Hex } from 'viem'
 import { createTransfer, transferDetails, submissionRejected, sendSignedOperation, type TransferDependencies } from './transactions.js'
 import { factoryAddress, type PreparedPasskey } from './passkey.js'
+import { formatEth } from './format.js'
 
 const sender = '0x1111111111111111111111111111111111111111' as const
 const recipient = '0x2222222222222222222222222222222222222222' as const
@@ -90,6 +91,26 @@ test('review precedes fresh signing; double clicks submit only once and executio
   assert.notEqual(hash, txHash)
   assert.equal(f.calls.balance, 4)
   assert.equal(f.saved.size, 0)
+})
+
+test('display formatting preserves entered precision and the exact signed quote', async () => {
+  for (const amount of ['0.000000000000000001', '0.0004000', '0.000400000000000001']) {
+    const value = parseEther(amount)
+    const f = fixture(value)
+    const transfer = createTransfer(prepared, f.deps)
+    await transfer.prepare(recipient, amount)
+    const quote = get(transfer).quote!
+    formatEth(quote.value)
+    formatEth(quote.maxFee)
+    formatEth(quote.value + quote.maxFee)
+    assert.equal(quote.amount, amount)
+    assert.equal(quote.value, value)
+    assert.deepEqual(quote.operation, operation)
+    await transfer.confirm()
+    assert.equal(f.calls.sign, 1)
+    assert.equal(f.calls.send, 1)
+    assert.equal(get(transfer).status, 'success')
+  }
 })
 
 test('operation failure and reverted enclosing transactions cannot report success', async () => {
@@ -359,8 +380,8 @@ test('RPC failure after signing identifies the balance check and leaves no submi
   await transfer.confirm()
   const state = get(transfer)
   assert.equal(state.status, 'error')
-  assert.match(state.message ?? '', /Base Sepolia RPC could not verify your balance/)
-  assert.match(state.message ?? '', /No operation was submitted/)
+  assert.match(state.message ?? '', /Unable to verify your Base Sepolia balance/)
+  assert.match(state.message ?? '', /No transfer was sent/)
   assert.doesNotMatch(state.message ?? '', /authorize or save|provider|apikey|secret/)
   assert.equal(state.submission, null)
   assert.equal(f.calls.sign, 1)

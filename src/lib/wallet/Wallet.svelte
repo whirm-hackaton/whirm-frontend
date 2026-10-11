@@ -22,7 +22,7 @@
     messageRegion = 'creation'
     await wallet.create()
     await tick()
-    if ($wallet.status === 'confirming') creationTitle?.focus()
+    if (['confirming', 'idle'].includes($wallet.status)) creationTitle?.focus()
     else if ($wallet.wallets.length) accessTitle?.focus()
   }
 
@@ -36,7 +36,7 @@
   async function confirmOpening() {
     await wallet.confirmReopen()
     await tick()
-    if ($wallet.openedWalletId && $wallet.openedPasskey) transferRegion?.focus()
+    if ($wallet.openedWalletId) document.getElementById('transfer-title')?.focus()
   }
 
   async function cancel() {
@@ -78,7 +78,6 @@
 <section lang="en" aria-labelledby="wallet-title">
   <div class="mb-8 flex flex-wrap items-center justify-between gap-4 md:mb-12">
     <h1 id="wallet-title" class="display-title">{$wallet.wallets.length ? 'Your wallet' : 'Create your wallet'}</h1>
-    <span class="network-badge">Base Sepolia · Testnet</span>
   </div>
 
   {#if !$wallet.wallets.length}
@@ -186,23 +185,16 @@
         {#if messageRegion === 'details'}{@render feedback()}{/if}
       </div>
 
-      {#if $wallet.openedWalletId !== metadata.id || !$wallet.openedPasskey}
+      {#if $wallet.openedWalletId !== metadata.id}
         <div class="mt-6 border-t pt-6" aria-busy={opening && $wallet.status !== 'awaiting-passkey'}>
-          <h2 bind:this={accessTitle} tabindex="-1" class="section-title">Open your wallet</h2>
+          <h2 bind:this={accessTitle} tabindex="-1" class="section-title">{$wallet.status === 'awaiting-passkey' ? 'Continue with your passkey' : 'Open your wallet'}</h2>
           <p class="mt-2 max-w-2xl text-sm text-muted-foreground">Use your existing passkey. Opening does not create a replacement wallet or authorize a transfer.</p>
-          <div class="notice mt-4 flex min-h-40 items-start sm:min-h-28" class:notice-error={messageRegion === 'opening' && $wallet.status === 'error'}>
-            <p role={messageRegion === 'opening' && $wallet.status === 'error' ? 'alert' : 'status'}>
-              {#if $wallet.status === 'awaiting-passkey'}
-                Unlock and sync the same Bitwarden vault configured with <span class="break-all">https://vault.whirm.dev</span>, then continue.
-              {:else if opening}
-                {$wallet.status === 'opening' ? 'Loading your registered wallet…' : 'Checking your existing passkey and wallet address…'}
-              {:else if messageRegion === 'opening' && $wallet.message}
-                {$wallet.message}
-              {:else}
-                Select Open wallet to continue with your saved passkey.
-              {/if}
-            </p>
-          </div>
+          {#if $wallet.status === 'awaiting-passkey'}
+            <p class="mt-4 max-w-2xl text-sm text-muted-foreground">Unlock and sync the same Bitwarden vault configured with <span class="break-all">https://vault.whirm.dev</span>, then continue.</p>
+          {:else if opening}
+            <p role="status" class="notice mt-4">{$wallet.status === 'opening' ? 'Loading your registered wallet…' : 'Checking your existing passkey and wallet address…'}</p>
+          {/if}
+          {#if messageRegion === 'opening'}{@render feedback()}{/if}
           <div class="action-row mt-4">
             {#if $wallet.status === 'awaiting-passkey'}
               <Button onclick={confirmOpening}>Continue with passkey</Button>

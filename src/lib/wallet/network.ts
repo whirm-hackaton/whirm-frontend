@@ -91,7 +91,7 @@ export function networkError(error: unknown, submittedHash?: Hex): string {
     cause = 'cause' in cause ? cause.cause : null
   }
   const diagnostic = messages.join(' ')
-  if (/\bAA1[345]\b|initCode (?:failed|must|does not)|Failed to simulate deployment/i.test(diagnostic)) return 'The smart account could not be deployed. Check its factory configuration and deployment diagnostics before trying again.'
+  if (/\bAA1[345]\b|initCode (?:failed|must|does not)|Failed to simulate deployment/i.test(diagnostic)) return 'The wallet could not be deployed. Contact support before trying again.'
   if (/\bAA31\b/i.test(diagnostic)) return 'The paymaster deposit is too low. This wallet uses its own ETH for fees; check the bundler configuration before trying again.'
   if (/\bAA21\b|insufficient funds|does not have sufficient funds|did not pay prefund/i.test(diagnostic)) return 'Your balance must cover the amount and network fees. Send a smaller amount or add funds to your wallet.'
   if (/AA24|invalid signature|signature.*invalid/i.test(diagnostic)) return 'The wallet signature was rejected. Reopen the same wallet and try again.'

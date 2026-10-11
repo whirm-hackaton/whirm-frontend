@@ -68,7 +68,7 @@
 
 <svelte:head>
   <title>{session && children ? 'Whirm · Passkey wallet' : mode === 'signup' ? 'Whirm · Sign up' : 'Whirm · Sign in'}</title>
-  <meta name="description" content="A personal passkey wallet. Explore the Whirm digital asset wallet hackathon prototype for Swissquote on Base Sepolia." />
+  <meta name="description" content="Access your personal Whirm wallet and send digital assets." />
 </svelte:head>
 
 {#snippet feedback()}
@@ -155,8 +155,4 @@
       </section>
     {/if}
   </main>
-
-  <footer class="page-container py-6 text-sm text-muted-foreground">
-    <p>Hackathon prototype{#if !session} <span class="mx-2" aria-hidden="true">·</span> Base Sepolia test network{/if}</p>
-  </footer>
 </div>

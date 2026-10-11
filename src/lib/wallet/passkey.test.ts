@@ -2,8 +2,9 @@
 
 import assert from 'node:assert/strict'
 import { test } from 'node:test'
+import { runInNewContext } from 'node:vm'
 import { decodeFunctionData, encodeAbiParameters, parseAbi } from 'viem'
-import { createPasskey, factoryAddress, isPasskeyMetadata, passkeyContext, preparePasskeyAccount, type PasskeyCredential } from './passkey.js'
+import { createPasskey, factoryAddress, isPasskeyMetadata, passkeyContext, passkeyRequestRejected, preparePasskeyAccount, type PasskeyCredential } from './passkey.js'
 
 const credential: PasskeyCredential = {
   credentialId: 'd2hpcm0',
@@ -11,6 +12,40 @@ const credential: PasskeyCredential = {
   rpId: 'localhost', origin: 'http://localhost:5173',
 }
 const metadata = { ...credential, accountVersion: '1.1', accountNonce: '0', factoryAddress }
+
+test('recognizes wrapped and cross-realm cancellation without treating unknown failures as cancellation', () => {
+  const foreign = runInNewContext('Object.assign(new Error("cancelled"), {name:"NotAllowedError"})')
+  assert.equal(foreign instanceof Error, false)
+  for (const error of [foreign, new Error('SDK wrapper', { cause: foreign }), { cause: { cause: { name: 'AbortError' } } }]) {
+    assert.equal(passkeyRequestRejected(error), true)
+  }
+  const cycle: { cause?: unknown } = {}
+  cycle.cause = cycle
+  for (const error of [new Error('timeout'), new Error('Failed to create credential.'), { name: 'TimeoutError' }, 'NotAllowedError', undefined, cycle]) {
+    assert.equal(passkeyRequestRejected(error), false)
+  }
+})
+
+test('real viem/ox adapter preserves a settled null or rejected creation; invalid returned credential stays uncertain', async () => {
+  const windowDescriptor = Object.getOwnPropertyDescriptor(globalThis, 'window')
+  const navigatorDescriptor = Object.getOwnPropertyDescriptor(globalThis, 'navigator')
+  Object.defineProperty(globalThis, 'window', { configurable: true, value: { location: { origin: credential.origin }, isSecureContext: true, PublicKeyCredential: class {} } })
+  let outcome: () => Promise<unknown> = async () => null
+  Object.defineProperty(globalThis, 'navigator', { configurable: true, value: { credentials: { create: () => outcome(), get() {} } } })
+  try {
+    for (const action of [async () => null, async () => { throw { name: 'NotAllowedError' } }, async () => { throw new DOMException('aborted', 'AbortError') }]) {
+      outcome = action
+      await assert.rejects(createPasskey('bank-user', new AbortController().signal), error => passkeyRequestRejected(error))
+    }
+    outcome = async () => ({ id: credential.credentialId, response: { getPublicKey: () => new ArrayBuffer(0) } })
+    await assert.rejects(createPasskey('bank-user', new AbortController().signal), error => !passkeyRequestRejected(error))
+  } finally {
+    if (windowDescriptor) Object.defineProperty(globalThis, 'window', windowDescriptor)
+    else Reflect.deleteProperty(globalThis, 'window')
+    if (navigatorDescriptor) Object.defineProperty(globalThis, 'navigator', navigatorDescriptor)
+    else Reflect.deleteProperty(globalThis, 'navigator')
+  }
+})
 
 test('validates P256 point and fixed reconstruction parameters/context', () => {
   assert.ok(isPasskeyMetadata(metadata))
