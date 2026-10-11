@@ -75,19 +75,7 @@ The optional `children(session, expireSession)` snippet displays the signed-in f
 
 ## Verification
 
-```sh
-pnpm exec tsc --ignoreConfig \
-  src/lib/auth/auth.ts src/lib/auth/auth.test.ts \
-  --outDir node_modules/.tmp/auth-tests \
-  --module nodenext --target es2023 --skipLibCheck
-
-BACKEND_URL=http://localhost:3000 node --test "$PWD/node_modules/.tmp/auth-tests/auth/auth.test.js"
-
-pnpm check
-pnpm build
-```
-
-Only tests replace `fetch`; the application uses the backend.
+Run the [integration test commands](integration.md#verification). Only tests replace `fetch`; the application uses the backend.
 
 In the browser, verify:
 
@@ -98,9 +86,3 @@ In the browser, verify:
 ## Production
 
 Set `BACKEND_URL` before building. Serve the frontend and backend over **HTTPS** on the same site to retain SameSite=Lax cookies, and allow the frontend origin in `CORS_ORIGINS`.
-
-## History
-
-Temporary stubs `simulation.ts` and `simulation.test.ts` from [HS-27](https://projects.dotshark.dev/hackatons/task/HS-27/construire-la-connexion-swissquote-et-ses-erreurs-ct-fronten), pending backend authentication, were replaced by the HTTP client and its tests.
-
-The [integration guide](integration.md) documents the common launch procedure, CORS/cookies, tests and the comparison with Kaneo tickets.

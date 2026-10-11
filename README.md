@@ -54,4 +54,4 @@ docs/                  Detailed documentation
 
 [Passkey wallets](docs/wallet.md) covers vault preparation, deterministic account settings, the address-only API contract, retries and validation limits. The passkey is created in the selected provider; no account is deployed by this flow.
 
-[API integration](docs/integration.md) provides the common launch procedure, cookie/CORS configuration, validation results and comparison with the assigned Kaneo tickets.
+[API integration](docs/integration.md) provides the common launch procedure, cookie/CORS configuration and test commands.

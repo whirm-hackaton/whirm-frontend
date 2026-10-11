@@ -28,24 +28,6 @@ HS-15 owns prepare → review → passkey sign → submit → receipt. Estimatio
 
 The account needs Base Sepolia ETH for transfer **plus** network fees and possible first deployment. Receiving ETH does not prove the passkey can spend. No gasless promise; sponsorship is separate.
 
-Run isolated adapter tests with the existing TypeScript/Node toolchain:
-
-```sh
-export BACKEND_URL=http://localhost:3000
-export WALLET_ORIGIN=http://localhost:5173
-export WALLET_RP_ID=localhost
-export BASE_SEPOLIA_RPC_URL=https://sepolia.base.org
-export BUNDLER_URL=https://public.pimlico.io/v2/84532/rpc
-pnpm exec tsc --ignoreConfig src/lib/wallet/network.ts src/lib/wallet/network.test.ts \
-  --outDir node_modules/.tmp/network-tests --module nodenext --target es2023 --skipLibCheck
-node --test "$PWD/node_modules/.tmp/network-tests/wallet/network.test.js"
-pnpm check
-pnpm build
-git diff --check
-```
-
-Tests mock only HTTP, exercising native viem transport, omitted credentials, wrong chain, missing EntryPoint, invalid fees, URL safety and safe errors. The full suite is in [integration verification](integration.md). No duplicate live integration suite is placed in the adapter.
-
-Previous read-only POST probes from this environment to the Base Sepolia RPC (`eth_chainId`) and Pimlico public bundler (`eth_chainId`, `eth_supportedEntryPoints`, `pimlico_getUserOperationGasPrice`) each returned HTTP 403. Live compatibility is unverified. Docker build/deployment, a funded demo account, final-domain passkey and device/provider tests were not performed. Live acceptance requires reopening that exact account, recording its address/balance/domain/RP ID/device, funding it, and submitting one operation with receipt and transaction references. No successful spending is asserted by this branch.
+Run the [integration test commands](integration.md#verification). Network tests mock HTTP while exercising native viem transport, omitted credentials, chain/EntryPoint checks, invalid fees, URL safety and safe errors. Live endpoint compatibility and successful spending require a funded-account acceptance check as described in [Transfers](transactions.md#verification).
 
 References: [viem bundler](https://viem.sh/account-abstraction/clients/bundler), [Coinbase account](https://viem.sh/account-abstraction/accounts/smart/toCoinbaseSmartAccount), [Pimlico fees](https://docs.pimlico.io/references/bundler/endpoints/pimlico_getUserOperationGasPrice).

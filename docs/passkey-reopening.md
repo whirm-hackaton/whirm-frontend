@@ -16,8 +16,6 @@ The same wallet origin and RP ID must be used on every device. A localhost passk
 
 Tests exercise signed P-256 assertions through the real recovery adapter and viem factory calldata, including recovered public key selection, wrong key/address, wrong domain/challenge, missing user verification, malformed signature, high-S signatures and cancellation. State tests exercise a fresh profile with only address/chain API metadata, direct-click confirmation, error handling, session expiration and late results. Run the test commands in [API integration](integration.md), pnpm check and pnpm build.
 
-On 11 October 2026, all 33 frontend tests, pnpm check (zero errors/warnings), pnpm build and git diff --check passed. Against the local API, the HS41 test account loaded its candidate wallet without passkey metadata, keyboard recovery reached confirmation, cancellation returned to a retryable state, and the 390px layout had no horizontal overflow. No actual Bitwarden signature was requested during that UI check.
-
 Actual Bitwarden desktop/mobile selection, vault synchronization and lost-device recovery remain to be checked in HS-38/HS-17. Fixtures do not establish those provider/device behaviors. Deployment and spending are separate.
 
 References: [WebAuthn assertion verification](https://www.w3.org/TR/webauthn-3/#sctn-verifying-assertion), [noble-curves v1.9.1](https://github.com/paulmillr/noble-curves/tree/1.9.1), [viem Coinbase account](https://viem.sh/account-abstraction/accounts/smart/toCoinbaseSmartAccount).
