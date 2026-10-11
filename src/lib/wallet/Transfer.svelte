@@ -21,6 +21,7 @@
   let amountInput = $state<HTMLInputElement>()
   let showFunding = $state(false)
   let copyMessage = $state('')
+  let copyFailed = $state(false)
   const locked = $derived(['preparing', 'review', 'signing', 'sending', 'pending'].includes($transfer.status))
   const busy = $derived(['preparing', 'signing', 'sending'].includes($transfer.status))
   const stage = $derived(newTransfer ? 'form' : ['review', 'signing'].includes($transfer.status) ? 'review'
@@ -61,9 +62,11 @@
   async function copyRecipient(address: string) {
     try {
       await navigator.clipboard.writeText(address)
+      copyFailed = false
       copyMessage = 'Recipient address copied.'
     } catch {
-      copyMessage = 'Unable to copy. Select and copy the full address above.'
+      copyFailed = true
+      copyMessage = 'Copy failed. Copy the address above.'
     }
   }
 
@@ -118,8 +121,10 @@
       <div class="financial-primary"><dt>Recipient</dt><dd class="font-mono text-base">{$transfer.quote.recipient}</dd></div>
       <div class="financial-primary"><dt>Amount to send</dt><dd class="amount-value">{formatEth($transfer.quote.value)}</dd></div>
     </dl>
-    <Button variant="outline" size="sm" onclick={() => copyRecipient($transfer.quote!.recipient)}>Copy recipient address</Button>
-    {#if copyMessage}<p role="status" class="text-sm">{copyMessage}</p>{/if}
+    <div class="relative flex">
+      <Button variant="outline" size="sm" onclick={() => copyRecipient($transfer.quote!.recipient)}>Copy recipient address</Button>
+      <p role="status" class={`absolute inset-x-0 top-full mt-1 text-sm ${copyFailed ? 'text-destructive' : 'text-[var(--success)]'}`}>{copyMessage}</p>
+    </div>
     <dl class="financial-summary fee-summary">
       <div><dt>Maximum network fee</dt><dd>{formatEth($transfer.quote.maxFee)}</dd></div>
       <div class="financial-total"><dt>Maximum total debited</dt><dd>{formatEth($transfer.quote.value + $transfer.quote.maxFee)}</dd></div>
