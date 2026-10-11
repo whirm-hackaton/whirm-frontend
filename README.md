@@ -20,6 +20,8 @@ pnpm dev
 
 Configure the public backend, wallet origin, RP ID and Base Sepolia RPC values shown in `.env.example` (required; no defaults), then open [localhost:5173](http://localhost:5173). Auth and wallet requests go directly to that URL, with session cookies. Restart Vite after changing `.env`; rebuild for production. The backend URL is public in the browser bundle.
 
+Optional public `BUNDLER_PROXY_URL` enables the prefunded Base Sepolia adapter once the authenticated API relay is deployed; blank disables transfers. Never expose a Pimlico key in frontend configuration. See [network and bundler configuration](docs/network.md).
+
 For local test accounts, run the backend migrations and seeder as described in [Authentication](docs/auth.md).
 
 ## Commands

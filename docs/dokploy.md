@@ -25,9 +25,11 @@ BACKEND_URL=https://api.whirm.dev
 WALLET_ORIGIN=https://app.whirm.dev
 WALLET_RP_ID=app.whirm.dev
 BASE_SEPOLIA_RPC_URL=https://sepolia.base.org
+# Enable after deploying the banking API relay; blank disables transfers.
+BUNDLER_PROXY_URL=https://api.whirm.dev/rpc/bundler
 ```
 
-All four values are public and embedded in the browser bundle. The Compose file interpolates them into Dockerfile **build arguments**, so they reach Vite during the build rather than only at container startup. Rebuild/redeploy after a change. Missing arguments fail the build. Never add a privileged service key, vault password or private wallet key here.
+The four required values and optional `BUNDLER_PROXY_URL` are public and embedded in the browser bundle. Compose passes them as Dockerfile **build arguments**, so they reach Vite during the build. Rebuild after a change. Missing required arguments fail the build. Leave the relay URL blank until its backend route is deployed. Never add a Pimlico/service key, vault password or private wallet key here. See [network and relay contract](network.md).
 
 ## DNS and HTTPS
 

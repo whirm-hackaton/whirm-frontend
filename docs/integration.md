@@ -50,6 +50,8 @@ The API permits one wallet per user. A `GET /wallet` response with status `404` 
 
 ## Verification
 
+For the optional authenticated bundler relay and isolated HS-11 checks, see [network configuration](network.md). `BUNDLER_PROXY_URL` defaults to blank so auth/passkey tests remain independent of the relay.
+
 No additional test dependency is needed. Export the four public values from `.env` before running Node tests (Vite loads them automatically). For localhost:
 
 ```sh
