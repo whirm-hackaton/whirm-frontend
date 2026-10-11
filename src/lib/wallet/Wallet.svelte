@@ -21,7 +21,7 @@
     messageRegion = 'creation'
     await wallet.create()
     await tick()
-    if ($wallet.status === 'confirming') creationTitle?.focus()
+    if (['confirming', 'idle'].includes($wallet.status)) creationTitle?.focus()
     else if ($wallet.wallets.length) accessTitle?.focus()
   }
 

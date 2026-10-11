@@ -125,7 +125,7 @@ export function createWallet(userId: string, onSessionExpired: () => void, depen
             let credential: PasskeyCredential
             try { credential = await deps.register(userId, controller.signal) }
             catch (error) {
-              if (passkeyRequestRejected(error)) {
+              if (passkeyRequestRejected(error) && hasInterruptedMarker()) {
                 deps.storage.removeItem(storageKey)
                 uncertain = false
               }
@@ -199,7 +199,10 @@ export function createWallet(userId: string, onSessionExpired: () => void, depen
         openedWalletId: keepOpened ? current.openedWalletId : null })
     } catch (error) {
       if (destroyed || pending !== controller) return
-      setState({ ...current, status: 'error', ...(hasResponse ? { wallets: [], openedWalletId: null } : {}), message: hasResponse
+      const cancelledCreation = create && !hasResponse && !uncertain && !current.draft && passkeyRequestRejected(error)
+      setState({ ...current, status: cancelledCreation ? 'idle' : 'error', ...(hasResponse ? { wallets: [], openedWalletId: null } : {}), message: cancelledCreation
+        ? 'Passkey creation cancelled or unavailable. You can try again.'
+        : hasResponse
         ? 'The server returned an invalid wallet response. Please refresh and try again. Your passkey has been kept.'
         : create ? uncertain && !current.draft
           ? 'The passkey request has an uncertain result. Unlock Bitwarden and recover the existing passkey before trying again.'
