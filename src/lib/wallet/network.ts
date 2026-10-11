@@ -91,9 +91,10 @@ export function networkError(error: unknown, submittedHash?: Hex): string {
     cause = 'cause' in cause ? cause.cause : null
   }
   const diagnostic = messages.join(' ')
-  if (/AA21|AA31|insufficient funds|prefund/i.test(diagnostic)) return 'This wallet needs more Base Sepolia ETH for the transfer, network fees and possible deployment.'
+  if (/\bAA1[345]\b|initCode (?:failed|must|does not)|Failed to simulate deployment/i.test(diagnostic)) return 'The smart account could not be deployed. Check its factory configuration and deployment diagnostics before trying again.'
+  if (/\bAA31\b/i.test(diagnostic)) return 'The paymaster deposit is too low. This wallet uses its own ETH for fees; check the bundler configuration before trying again.'
+  if (/\bAA21\b|insufficient funds|does not have sufficient funds|did not pay prefund/i.test(diagnostic)) return 'Your balance must cover the amount and network fees. Send a smaller amount or add funds to your wallet.'
   if (/AA24|invalid signature|signature.*invalid/i.test(diagnostic)) return 'The wallet signature was rejected. Reopen the same wallet and try again.'
-  if (/AA13|AA14|AA15|initCode/i.test(diagnostic)) return 'The smart account could not be deployed. Check its factory and funding before trying again.'
   if (/revert|AA23/i.test(diagnostic)) return 'The operation was rejected by the network. Check the recipient, amount and wallet balance.'
   if (/timeout|timed out|network|fetch|HTTP/i.test(diagnostic)) return 'The wallet service could not confirm this request. Check operation status before retrying a send.'
   return 'The wallet service rejected this request. Check your connection and operation status before trying again.'

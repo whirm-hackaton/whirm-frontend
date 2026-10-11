@@ -4,6 +4,14 @@ Open the registered wallet with its existing passkey, then use the **Send ETH** 
 
 The transfer form validates an Ethereum recipient and a positive ETH amount with at most 18 decimal places. Zero addresses, self-transfers, exponents and comma separators are refused. The client prepares the operation and loads the balance before showing the exact recipient, amount, network, maximum fee and maximum total. This path requires the account balance to cover both amount and fees; sponsoring is not enabled. The fee ceiling comes from the prepared gas limits and `maxFeePerGas`; the execution receipt reports the actual fee.
 
+HS-44 checks the balance before estimation, again against the prepared fee ceiling, and inside the submission lock after signing. An amount above the balance is refused before account preparation. An amount covered by the balance but exceeding it once fees are included gets a separate explanation. All comparisons and shortfalls use `bigint`. A balance drop after review prevents submission without creating a pending marker.
+
+The shared balance adapter verifies RPC chain ID 84532 before each balance read, including refresh and the final check before sending. A wrong-chain or unavailable RPC blocks the read rather than diagnosing insufficient funds from another network's balance.
+
+Preparation errors retain a **Last transfer check** with the checked balance, amount, available fee ceiling, total and positive shortfall. Unknown fees and totals stay unavailable; a shortfall computed without fees is explicitly labelled as such. **Edit amount** focuses and selects the existing input; **Add funds to wallet** shows the same account address and Base Sepolia funding instructions. Neither action resets the recipient or creates a wallet. Review the transfer again after editing or funding.
+
+Deployment errors AA13/AA14/AA15 stay distinct from explicit account funding errors such as AA21. Merely mentioning `initCode` or `prefund` in RPC diagnostics does not prove insufficient funds; AA31 concerns a paymaster deposit rather than the wallet balance.
+
 **Authorize and send** invokes `account.signUserOperation` before another asynchronous action, retaining the original passkey AbortSignal. Viem may resolve the already-calculated account address first, but no gas/nonce/paymaster network preparation precedes signing. Submission uses viem's accountless `sendUserOperation` action with all reviewed fields and the resulting real signature. The account is explicitly cleared on both client and request, so submission cannot prepare or sign the operation again.
 
 ## Configuration
@@ -25,6 +33,8 @@ A bundler which never returns a receipt after an ambiguous submission leaves sen
 The implementation uses the installed viem 2.38.5 account-abstraction actions ([official sending guide](https://viem.sh/account-abstraction/guides/sending-user-operations)).
 
 Compile and run the existing [integration suite](integration.md#verification), including `src/lib/wallet/transactions.ts` and `src/lib/wallet/transactions.test.ts`. The new tests cover exact bigint amount validation, review before signing, duplicate clicks, cancellation/unmount races, insufficient funds, forbidden paymaster data, deterministic rejection, timeout/reload safety, receipt identity/execution failure, stale balance and cross-tab receipt races, and real viem RPC serialization with every signed field preserved. `pnpm check`, `pnpm build` and `git diff --check` are also required.
+
+HS-44 local checks on 11 October 2026: 69 frontend tests passed, including amount equal to balance with nonzero fees, a one-wei shortfall above the floating-point safe range, exact sufficient total, independent deployment/RPC errors, missing balance, zero fee estimates and cancellation during the final balance check. Svelte/TypeScript checks and production build passed. Browser QA used the real `Transfer.svelte` and transfer store with fixture dependencies and compiled production CSS: desktop at 1280 px, mobile at 390 px without horizontal overflow, keyboard review/edit/funding/cancellation, preserved input, and a smaller amount reaching review. Screenshots use simulated balances and fees: [desktop](screenshots/hs-44/insufficient-fees-desktop.jpg), [mobile](screenshots/hs-44/insufficient-fees-mobile.jpg). No real passkey signing, deployment or outgoing transaction was performed.
 
 Fixture tests do not prove a real passkey provider or chain transfer. For live acceptance, configure the public bundler endpoint and wallet origin/RP ID, fund the **recovered account address** with Base Sepolia ETH for amount plus fees, then:
 

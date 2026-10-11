@@ -75,7 +75,7 @@ test('native bundler omits credentials and validates Base Sepolia, EP06 and vali
 })
 
 test('network errors classify funding/signature/provider failures without exposing provider secrets', () => {
-  assert.match(networkError(new Error('AA21 did not pay prefund https://provider?apikey=secret')), /more Base Sepolia ETH/)
+  assert.match(networkError(new Error('AA21 did not pay prefund https://provider?apikey=secret')), /balance must cover/)
   assert.match(networkError(new Error('AA24 signature error')), /signature was rejected/)
   assert.match(networkError(new Error('AA13 initCode failed')), /could not be deployed/)
   assert.match(networkError(new Error('AA23 reverted')), /rejected by the network/)
@@ -85,4 +85,11 @@ test('network errors classify funding/signature/provider failures without exposi
   assert.match(networkError(new Error('fetch timed out')), /status before retrying/)
   assert.match(networkError(new Error('secret'), '0x1234'), /submitted.*unknown/)
   assert.doesNotMatch(networkError(new Error('https://provider?apikey=secret')), /provider|apikey|secret/)
+})
+
+test('deployment, paymaster and unavailable estimation are not inferred to be wallet funding failures', () => {
+  assert.match(networkError(new Error('AA13 initCode failed; prefund: unknown')), /could not be deployed/)
+  assert.match(networkError(new Error('fetch timed out; initCode: 0x123; prefund calculation unavailable')), /service could not confirm/)
+  assert.match(networkError(new Error('AA31 paymaster deposit too low')), /paymaster/i)
+  assert.doesNotMatch(networkError(new Error('AA31 paymaster deposit too low')), /add funds to your wallet/i)
 })

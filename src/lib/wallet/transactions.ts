@@ -16,6 +16,7 @@ export type TransferState = {
   balanceMessage: string | null
   message: string | null
   quote: Quote | null
+  funding: { value: bigint; balance: bigint | null; maxFee: bigint | null } | null
   submission: Submission | null
   receipt: UserOperationReceipt<'0.6'> | null
   checking: boolean
@@ -70,7 +71,10 @@ export function createTransfer(prepared: PreparedPasskey, dependencies?: Transfe
         receipt: (hash) => bundler.waitForUserOperationReceipt({ hash, timeout: 45_000 }),
       }
     },
-    balance: (address) => publicClient.getBalance({ address }),
+    balance: async (address) => {
+      if (await publicClient.getChainId() !== 84532) throw new TransferError('The RPC must use Base Sepolia (84532). Check its configuration before trying again.')
+      return publicClient.getBalance({ address })
+    },
     receipt: async (hash) => {
       // Receipt lookup uses the same validated bundler as preparation, without asking for another passkey.
       const account = await toPasskeyAccount(prepared.passkey)
@@ -87,7 +91,7 @@ export function createTransfer(prepared: PreparedPasskey, dependencies?: Transfe
     },
     unavailable: networkUnavailableReason,
   }
-  let current: TransferState = { status: 'idle', balance: null, balanceMessage: null, message: null, quote: null, submission: null, receipt: null, checking: false }
+  let current: TransferState = { status: 'idle', balance: null, balanceMessage: null, message: null, quote: null, funding: null, submission: null, receipt: null, checking: false }
   const state = writable(current)
   let controller: AbortController | undefined
   let attempt: { account: Account; send: (operation: Operation) => Promise<Hex>; receipt: (hash: Hex) => Promise<UserOperationReceipt<'0.6'>> } | undefined
@@ -96,6 +100,12 @@ export function createTransfer(prepared: PreparedPasskey, dependencies?: Transfe
   function update(next: Partial<TransferState>) {
     current = { ...current, ...next }
     if (!destroyed) state.set(current)
+  }
+  function checkFunding(value: bigint, maxFee: bigint | null, balance: bigint) {
+    balanceRequest++
+    update({ balance, balanceMessage: null, funding: { value, maxFee, balance } })
+    if (value > balance) throw new TransferError('The amount exceeds your balance. Send a smaller amount or add funds to your wallet. Your balance must also cover network fees.')
+    if (maxFee !== null && value + maxFee > balance) throw new TransferError('Your balance must cover the amount and network fees. Send a smaller amount or add funds to your wallet.')
   }
   function savedSubmission(): Submission | null {
     const raw = deps.storage.getItem(key)
@@ -141,13 +151,17 @@ export function createTransfer(prepared: PreparedPasskey, dependencies?: Transfe
     const next = new AbortController()
     controller = next
     attempt = undefined
-    update({ status: 'preparing', message: null, quote: null, receipt: null, submission: null })
+    update({ status: 'preparing', message: null, quote: null, funding: null, receipt: null, submission: null })
     try {
       const existing = savedSubmission()
       if (existing) { update({ status: 'pending', submission: existing, message: 'Another submission needs a receipt check before sending.' }); return }
       const unavailable = deps.unavailable()
       if (unavailable) throw new TransferError(unavailable)
       const details = transferDetails(recipient, amount, prepared.address)
+      update({ funding: { value: details.value, balance: null, maxFee: null } })
+      const initialBalance = await deps.balance(prepared.address)
+      next.signal.throwIfAborted()
+      checkFunding(details.value, null, initialBalance)
       const account = await deps.account(prepared, next.signal)
       next.signal.throwIfAborted()
       if (account.address.toLowerCase() !== prepared.address.toLowerCase()) throw new TransferError('The passkey account does not match this wallet.')
@@ -156,12 +170,13 @@ export function createTransfer(prepared: PreparedPasskey, dependencies?: Transfe
       const operation = quoted.operation
       if (operation.sender.toLowerCase() !== prepared.address.toLowerCase() || (operation.paymasterAndData && operation.paymasterAndData !== '0x')) throw new TransferError('The operation does not match the prefunded account.')
       const maxFee = (operation.callGasLimit + operation.verificationGasLimit + operation.preVerificationGas) * operation.maxFeePerGas
+      if (maxFee <= 0n) throw new TransferError('A valid network fee estimate is unavailable. Sending is blocked. Try reviewing the transfer again.')
+      update({ funding: { value: details.value, balance: initialBalance, maxFee } })
       const balance = await deps.balance(prepared.address)
       next.signal.throwIfAborted()
-      if (maxFee <= 0n || balance < details.value + maxFee) throw new TransferError('The wallet needs enough Base Sepolia ETH for the amount and maximum network fee.')
+      checkFunding(details.value, maxFee, balance)
       if (destroyed || controller !== next) return
       attempt = { account, send: quoted.send, receipt: quoted.receipt }
-      balanceRequest++
       update({ status: 'review', balance, balanceMessage: null, quote: { ...details, maxFee, operation } })
     } catch (error) {
       if (!destroyed && controller === next) update({ status: next.signal.aborted ? 'cancelled' : 'error', message: error instanceof TransferError ? error.message : networkError(error) })
@@ -185,6 +200,12 @@ export function createTransfer(prepared: PreparedPasskey, dependencies?: Transfe
         active.signal.throwIfAborted()
         const existing = savedSubmission()
         if (existing) { update({ status: 'pending', submission: existing, message: 'Another submission needs a receipt check before sending.' }); return }
+        const balance = await deps.balance(prepared.address).catch((error: unknown) => {
+          throw error instanceof TransferError ? error
+            : new TransferError('The Base Sepolia RPC could not verify your balance. No operation was submitted. Check your connection and review the transfer again.')
+        })
+        active.signal.throwIfAborted()
+        checkFunding(quote.value, quote.maxFee, balance)
         const submission = { hash, recipient: quote.recipient, amount: quote.amount }
         deps.storage.setItem(key, JSON.stringify(submission))
         update({ status: 'sending', submission, message: 'Submitting the signed operation. It can no longer be cancelled safely.' })
@@ -203,7 +224,8 @@ export function createTransfer(prepared: PreparedPasskey, dependencies?: Transfe
     } catch (error) {
       if (!destroyed && controller === active) update({ status: passkeyRequestRejected(error) ? 'cancelled' : 'error', message: passkeyRequestRejected(error)
         ? 'Passkey authorization cancelled or refused. No operation was submitted.'
-        : 'Unable to authorize or save this transfer. No operation was submitted. Review it again before retrying.' })
+        : error instanceof TransferError ? error.message
+          : 'Unable to authorize or save this transfer. No operation was submitted. Review it again before retrying.' })
     }
   }
 

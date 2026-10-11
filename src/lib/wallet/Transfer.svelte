@@ -17,6 +17,8 @@
   let amount = $state('')
   let newTransfer = $state(false)
   let stageHeading = $state<HTMLHeadingElement>()
+  let amountInput = $state<HTMLInputElement>()
+  let showFunding = $state(false)
   const locked = $derived(['preparing', 'review', 'signing', 'sending', 'pending'].includes($transfer.status))
   const busy = $derived(['preparing', 'signing', 'sending'].includes($transfer.status))
   const stage = $derived(newTransfer ? 'form' : ['review', 'signing'].includes($transfer.status) ? 'review'
@@ -25,6 +27,9 @@
   const heading = $derived(stage === 'review' ? 'Review transfer' : stage === 'pending' ? 'Transfer in progress'
     : stage === 'result' ? ($transfer.status === 'success' ? 'Transfer confirmed' : 'Transfer not confirmed') : 'Send ETH')
   const receiptJson = $derived($transfer.receipt ? JSON.stringify($transfer.receipt, (_key, value) => typeof value === 'bigint' ? value.toString() : value, 2) : '')
+  const fundingTotal = $derived($transfer.funding?.maxFee == null ? null : $transfer.funding.value + $transfer.funding.maxFee)
+  const shortfall = $derived($transfer.funding?.balance == null ? null
+    : (fundingTotal ?? $transfer.funding.value) > $transfer.funding.balance ? (fundingTotal ?? $transfer.funding.value) - $transfer.funding.balance : 0n)
 
   // Report synchronously so metadata refresh cannot start between a click and the next render.
   const stopActivity = untrack(() => transfer.subscribe((state) => {
@@ -41,6 +46,7 @@
     event.preventDefault()
     if (metadataRefreshing || locked || unavailable) return
     newTransfer = false
+    showFunding = false
     void transfer.prepare(recipient.trim(), amount.trim())
   }
 
@@ -86,7 +92,7 @@
       </div>
       <div class="space-y-2">
         <label for="transfer-amount" class="block font-semibold">Amount in ETH</label>
-        <input id="transfer-amount" bind:value={amount} required disabled={locked || !!unavailable || metadataRefreshing} inputmode="decimal" autocomplete="off" aria-describedby="amount-help" class="field-input" placeholder="0.00001" />
+        <input id="transfer-amount" bind:this={amountInput} bind:value={amount} required disabled={locked || !!unavailable || metadataRefreshing} inputmode="decimal" autocomplete="off" aria-describedby="amount-help" class="field-input" placeholder="0.00001" />
         <p id="amount-help" class="text-sm text-muted-foreground">Use a decimal point, with up to 18 decimal places. Keep enough test ETH for network fees.</p>
       </div>
       {#if metadataRefreshing}<p role="status" class="notice">Wait for wallet details to finish refreshing before reviewing a transfer.</p>{/if}
@@ -124,6 +130,34 @@
 
   {#if $transfer.message && !newTransfer}
     <p role={['error', 'failed'].includes($transfer.status) ? 'alert' : 'status'} class={['error', 'failed'].includes($transfer.status) ? 'notice notice-error' : $transfer.status === 'success' ? 'notice notice-success' : ['sending', 'pending'].includes($transfer.status) ? 'notice notice-pending' : 'notice'}>{$transfer.message}</p>
+  {/if}
+  {#if stage === 'form' && $transfer.status === 'error' && $transfer.funding}
+    <section aria-labelledby="funding-summary-title" class="space-y-4">
+      <h3 id="funding-summary-title" class="font-semibold">Last transfer check</h3>
+      <dl class="financial-summary">
+        <div><dt>Checked balance</dt><dd>{$transfer.funding.balance === null ? 'Unavailable' : `${formatEther($transfer.funding.balance)} ETH`}</dd></div>
+        <div><dt>Amount</dt><dd>{formatEther($transfer.funding.value)} ETH</dd></div>
+        <div><dt>Maximum network fee</dt><dd>{$transfer.funding.maxFee === null ? 'Unavailable' : `${formatEther($transfer.funding.maxFee)} ETH`}</dd></div>
+        <div><dt>Maximum total required</dt><dd>{fundingTotal === null ? 'Unavailable until fees are estimated' : `${formatEther(fundingTotal)} ETH`}</dd></div>
+        {#if shortfall !== null && (fundingTotal !== null || shortfall > 0n)}
+          <div class="financial-total"><dt>{fundingTotal === null ? 'Shortfall before network fees' : 'Shortfall'}</dt><dd>{formatEther(shortfall)} ETH</dd></div>
+        {/if}
+      </dl>
+      {#if $transfer.funding.maxFee === null}
+        <p class="text-sm text-muted-foreground">No network fee estimate is available. Sending is blocked; fees are not assumed to be zero.</p>
+      {/if}
+      <div class="action-row">
+        <Button variant="outline" disabled={!!unavailable || metadataRefreshing} onclick={() => { amountInput?.focus(); amountInput?.select() }}>Edit amount</Button>
+        <Button variant="outline" aria-expanded={showFunding} aria-controls="wallet-funding" onclick={() => showFunding = !showFunding}>Add funds to wallet</Button>
+      </div>
+      {#if showFunding}
+        <div id="wallet-funding" class="notice space-y-2">
+          <p class="font-semibold">Fund this wallet on Base Sepolia (84532)</p>
+          <p class="text-sm">Send Base Sepolia test ETH to this address, then refresh the balance and review your transfer again. Keep enough ETH for the amount and network fees.</p>
+          <p class="break-all font-mono text-sm">{prepared.address}</p>
+        </div>
+      {/if}
+    </section>
   {/if}
   {#if stage === 'pending' && $transfer.status === 'pending'}
     <div class="action-row">
