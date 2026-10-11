@@ -8,6 +8,57 @@ import { createAuth } from './auth.js'
 const user = { id: '3e2854f2-219f-4d6b-9fc3-5239c439bc04', email: 'alice@example.com', displayName: 'Alice' }
 const userResponse = () => Response.json({ user })
 
+test('signup sends normalized details and accepts the 201 session before restoration and logout', async (context) => {
+  const responses = [Response.json({ user }, { status: 201 }), userResponse(), new Response(null, { status: 204 })]
+  const fetch = context.mock.method(globalThis, 'fetch', async () => responses.shift()!)
+  const auth = createAuth()
+  await auth.signup(' ALICE@example.com ', 'abcdefgh', ' Alice ')
+  assert.deepEqual(get(auth), { status: 'connected', session: user, message: null })
+  const request = fetch.mock.calls[0].arguments
+  assert.equal(request[0], 'http://localhost:3000/auth/signup')
+  assert.equal(request[1]?.method, 'POST')
+  assert.equal(request[1]?.credentials, 'include')
+  assert.deepEqual(JSON.parse(request[1]?.body as string), { email: user.email, password: 'abcdefgh', displayName: 'Alice' })
+  await auth.restore()
+  assert.deepEqual(get(auth).session, user)
+  await auth.disconnect()
+  assert.equal(get(auth).session, null)
+  auth.destroy()
+})
+
+test('signup conflict, validation errors and unexpected success responses do not authenticate', async (context) => {
+  const responses = [new Response(null, { status: 409 }), new Response(null, { status: 400 }), userResponse(), Response.json({ user: { ...user, id: 'invalid' } }, { status: 201 })]
+  context.mock.method(globalThis, 'fetch', async () => responses.shift()!)
+  const auth = createAuth()
+  await auth.signup(user.email, 'abcdefgh', 'Alice')
+  assert.match(get(auth).message!, /already registered/)
+  assert.equal(get(auth).session, null)
+  await auth.signup(user.email, 'short', 'Alice')
+  assert.match(get(auth).message!, /8 to 1024/)
+  assert.equal(get(auth).session, null)
+  for (let index = 0; index < 2; index++) {
+    await auth.signup(user.email, 'abcdefgh', 'Alice')
+    assert.match(get(auth).message!, /invalid response/)
+    assert.equal(get(auth).session, null)
+  }
+  auth.destroy()
+})
+
+test('signup suppresses duplicate submits and ignores a response after destruction', async (context) => {
+  let resolve!: (response: Response) => void
+  const fetch = context.mock.method(globalThis, 'fetch', () => new Promise<Response>((done) => { resolve = done }))
+  const auth = createAuth()
+  const signup = auth.signup(user.email, 'abcdefgh', 'Alice')
+  await auth.signup(user.email, 'abcdefgh', 'Alice')
+  await auth.connect(user.email, 'abcdefgh')
+  assert.equal(fetch.mock.callCount(), 1)
+  auth.destroy()
+  assert.equal(fetch.mock.calls[0].arguments[1]?.signal?.aborted, true)
+  resolve(Response.json({ user }, { status: 201 }))
+  await signup
+  assert.equal(get(auth).session, null)
+})
+
 test('restores the cookie session, signs in, and signs out through the backend endpoints', async (context) => {
   const responses = [new Response(null, { status: 401 }), userResponse(), userResponse(), new Response(null, { status: 204 })]
   const fetch = context.mock.method(globalThis, 'fetch', async () => responses.shift()!)
