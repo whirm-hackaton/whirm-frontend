@@ -1,0 +1,19 @@
+services:
+  frontend:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      args:
+        BACKEND_URL: ${BACKEND_URL:?Set BACKEND_URL in Dokploy Environment}
+        WALLET_ORIGIN: ${WALLET_ORIGIN:?Set WALLET_ORIGIN in Dokploy Environment}
+        WALLET_RP_ID: ${WALLET_RP_ID:?Set WALLET_RP_ID in Dokploy Environment}
+        BASE_SEPOLIA_RPC_URL: ${BASE_SEPOLIA_RPC_URL:?Set BASE_SEPOLIA_RPC_URL in Dokploy Environment}
+    restart: unless-stopped
+    expose:
+      - "80"
+    healthcheck:
+      test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://127.0.0.1/"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
