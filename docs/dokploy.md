@@ -25,9 +25,11 @@ BACKEND_URL=https://api.whirm.dev
 WALLET_ORIGIN=https://app.whirm.dev
 WALLET_RP_ID=app.whirm.dev
 BASE_SEPOLIA_RPC_URL=https://sepolia.base.org
+# Public keyless Pimlico endpoint; blank disables transfers.
+BUNDLER_URL=https://public.pimlico.io/v2/84532/rpc
 ```
 
-All four values are public and embedded in the browser bundle. The Compose file interpolates them into Dockerfile **build arguments**, so they reach Vite during the build rather than only at container startup. Rebuild/redeploy after a change. Missing arguments fail the build. Never add a privileged service key, vault password or private wallet key here.
+The four required values and optional `BUNDLER_URL` are public and embedded in the browser bundle. Compose passes them as Dockerfile **build arguments**, so they reach Vite during the build. Rebuild after a change. Missing required arguments fail the build. The bundler URL connects directly from the browser without cookies; blank disables transfers. Never add a private Pimlico/service key, vault password or private wallet key here. See [network configuration](network.md).
 
 ## DNS and HTTPS
 

@@ -8,6 +8,7 @@ export function parseEnv(source: Record<string, string | undefined>) {
     WALLET_ORIGIN: url(),
     WALLET_RP_ID: str(),
     BASE_SEPOLIA_RPC_URL: url(),
+    BUNDLER_URL: str({ default: '', allowEmpty: true }),
   }, { env: source })
 }
 
