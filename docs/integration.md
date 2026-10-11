@@ -62,11 +62,13 @@ pnpm exec tsc --ignoreConfig \
   src/lib/auth/auth.ts src/lib/auth/auth.test.ts \
   src/lib/wallet/wallet.ts src/lib/wallet/wallet.test.ts \
   src/lib/wallet/passkey.ts src/lib/wallet/passkey.test.ts \
+  src/lib/wallet/assertion.ts src/lib/wallet/assertion.test.ts \
+  src/lib/wallet/reopen.test.ts src/lib/wallet/recovery.test.ts \
   --outDir node_modules/.tmp/integration-tests \
   --module nodenext --target es2023 --skipLibCheck
 BACKEND_URL=http://localhost:3000 node --test "$PWD/node_modules/.tmp/integration-tests/env.test.js"
 BACKEND_URL=http://localhost:3000 node --test "$PWD/node_modules/.tmp/integration-tests/auth/auth.test.js"
-node --test "$PWD/node_modules/.tmp/integration-tests/wallet/wallet.test.js" "$PWD/node_modules/.tmp/integration-tests/wallet/passkey.test.js"
+node --test "$PWD"/node_modules/.tmp/integration-tests/wallet/*.test.js
 pnpm check
 pnpm build
 ```
@@ -108,6 +110,8 @@ The subsequent single-wallet route correction passed 22 tests, `pnpm check`, `pn
 The address-only PoC correction passed 23 tests, `pnpm check`, `pnpm build` and `git diff --check`. A temporary test user exercised the corrected client against the real local API with WebAuthn/account preparation fixtures: GET `404`, PUT `201 candidate`, GET `200` with the same wallet, and repeated PUT `200` with the same ID. Browser checks confirmed the candidate stays unverified and displays without expecting passkey metadata from the API. The temporary user/wallet were removed; real Bitwarden creation remains an HS-38 check.
 
 ## Production and preview
+
+HS-42 uses the address-only GET /wallet contract and frontend recovery from an existing discoverable passkey. No passkey metadata or association-proof endpoint is required from the API. See [Recover the same wallet](passkey-reopening.md) for the recovery algorithm and real-provider validation limits.
 
 Set `BACKEND_URL` before building. Serve both services over HTTPS on the same site (for example, `app.example.com` and `api.example.com`) for SameSite=Lax cookies. List the public frontend origin in backend `CORS_ORIGINS`, and set `NODE_ENV=production` for Secure cookies. The backend URL is public in the static bundle.
 

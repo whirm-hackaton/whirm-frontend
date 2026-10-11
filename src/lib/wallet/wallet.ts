@@ -1,6 +1,6 @@
 import { writable } from 'svelte/store'
 import { env } from '../env.js'
-import { createPasskey, preparePasskeyAccount, isPasskeyCredential, passkeyContext, passkeyError, passkeyRequestRejected, type PasskeyCredential, type PreparedPasskey } from './passkey.js'
+import { createPasskey, preparePasskeyAccount, recoverPasskeyAccount, isPasskeyCredential, passkeyContext, passkeyError, passkeyRequestRejected, type PasskeyCredential, type PreparedPasskey } from './passkey.js'
 
 export type WalletMetadata = {
   id: string
@@ -13,10 +13,11 @@ export type WalletMetadata = {
 }
 
 type WalletState = {
-  status: 'loading' | 'idle' | 'confirming' | 'creating' | 'ready' | 'error' | 'cancelled' | 'expired'
+  status: 'loading' | 'idle' | 'confirming' | 'creating' | 'opening' | 'awaiting-passkey' | 'verifying' | 'ready' | 'error' | 'cancelled' | 'expired'
   wallets: WalletMetadata[]
   message: string | null
   draft: PasskeyCredential | null
+  openedWalletId: string | null
 }
 
 const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
@@ -41,10 +42,11 @@ type WalletDependencies = {
   prepare: typeof preparePasskeyAccount
   context: typeof passkeyContext
   lock: (action: () => Promise<void>) => Promise<void>
+  recover?: typeof recoverPasskeyAccount
 }
 
 export function createWallet(userId: string, onSessionExpired: () => void, dependencies?: WalletDependencies) {
-  const deps = dependencies ?? {
+  const deps: WalletDependencies = dependencies ?? {
     get storage() { return localStorage },
     register: createPasskey,
     prepare: preparePasskeyAccount,
@@ -57,13 +59,14 @@ export function createWallet(userId: string, onSessionExpired: () => void, depen
       })
     },
   }
-  let current: WalletState = { status: 'loading', wallets: [], message: null, draft: null }
+  let current: WalletState = { status: 'loading', wallets: [], message: null, draft: null, openedWalletId: null }
   const state = writable<WalletState>(current)
   const storageKey = `whirm-passkey:${userId}:${env.WALLET_ORIGIN}`
   let pending: AbortController | undefined
   let destroyed = false
   let uncertain = false
   let prepared: PreparedPasskey | undefined
+  let reopening: { wallet: WalletMetadata; controller: AbortController } | undefined
 
   function setState(next: WalletState) {
     current = next
@@ -91,9 +94,11 @@ export function createWallet(userId: string, onSessionExpired: () => void, depen
     if (destroyed || pending || current.status === 'expired') return
     if (create && current.status !== 'confirming') return
     const controller = new AbortController()
+    reopening?.controller.abort()
+    reopening = undefined
     pending = controller
     let hasResponse = false
-    setState({ ...current, status: create ? 'creating' : 'loading', message: null })
+    setState({ ...current, status: create ? 'creating' : 'loading', message: null, openedWalletId: null })
 
     try {
       if (create) {
@@ -139,7 +144,7 @@ export function createWallet(userId: string, onSessionExpired: () => void, depen
       hasResponse = true
       if (destroyed || pending !== controller) return
       if (response.status === 401) {
-        setState({ status: 'expired', wallets: [], message: null, draft: null })
+        setState({ status: 'expired', wallets: [], message: null, draft: null, openedWalletId: null })
         onSessionExpired()
         return
       }
@@ -185,19 +190,90 @@ export function createWallet(userId: string, onSessionExpired: () => void, depen
     }
   }
 
+  function reopenError(error: unknown, controller: AbortController) {
+    if (destroyed || pending !== controller || current.status === 'expired') return
+    reopening = undefined
+    controller.abort()
+    setState({ ...current, status: 'error', openedWalletId: null, message: passkeyRequestRejected(error)
+      ? 'Passkey request cancelled or unavailable. Unlock and sync the same Bitwarden vault, then try again. No replacement passkey was created.'
+      : error instanceof Error && /^(Wallet recovery|The server|The selected|The reconstructed|Open the configured|Passkeys are unavailable)/.test(error.message)
+        ? error.message
+        : 'Unable to reopen this wallet. Unlock the same Bitwarden vault, check the wallet domain and RP ID, and check your API and Base Sepolia connection. No replacement passkey was created.' })
+  }
+
+  async function reopen(id: string) {
+    if (destroyed || pending || current.status === 'expired' || !current.wallets.some((wallet) => wallet.id === id)) return
+    reopening?.controller.abort()
+    reopening = undefined
+    const controller = new AbortController()
+    pending = controller
+    setState({ ...current, status: 'opening', message: null, openedWalletId: null })
+    try {
+      deps.context()
+      const response = await fetch(`${env.BACKEND_URL.replace(/\/+$/, '')}/wallet`, {
+        credentials: 'include', signal: controller.signal,
+      })
+      if (destroyed || pending !== controller) return
+      if (response.status === 401) {
+        setState({ status: 'expired', wallets: [], message: null, draft: null, openedWalletId: null })
+        onSessionExpired()
+        return
+      }
+      if (response.status === 404) {
+        setState({ ...current, status: 'idle', wallets: [], message: 'No wallet is registered for your account. No passkey was requested.' })
+        return
+      }
+      if (response.status !== 200) throw new Error('The server could not load your wallet. Refresh and try again.')
+      const data: unknown = await response.json()
+      if (destroyed || pending !== controller) return
+      const metadata = typeof data === 'object' && data !== null && 'wallet' in data ? data.wallet : null
+      if (!isWallet(metadata, userId) || metadata.id !== id) throw new Error('The server returned invalid wallet details. Refresh and try again.')
+      reopening = { wallet: metadata, controller }
+      setState({ ...current, wallets: [metadata], status: 'awaiting-passkey', message: null })
+    } catch (error) { reopenError(error, controller) }
+    finally { if (pending === controller) pending = undefined }
+  }
+
+  async function confirmReopen() {
+    if (destroyed || pending || current.status !== 'awaiting-passkey' || !reopening) return
+    const attempt = reopening
+    const { controller } = attempt
+    pending = controller
+    setState({ ...current, status: 'verifying', message: null, openedWalletId: null })
+    try {
+      // Request the discoverable credential directly from this click, before network awaits.
+      const recovered = await (deps.recover ?? recoverPasskeyAccount)(attempt.wallet.address, controller.signal)
+      if (destroyed || pending !== controller) return
+      if (recovered.address.toLowerCase() !== attempt.wallet.address) throw new Error('The reconstructed account does not match your saved wallet. Recovery stopped; no replacement was created.')
+      setState({ ...current, status: 'ready', openedWalletId: attempt.wallet.id,
+        message: 'Wallet reopened with your existing passkey. Its address matches the registered wallet. This does not verify your bank association.',
+        wallets: [attempt.wallet] })
+      reopening = undefined
+    } catch (error) { reopenError(error, controller) }
+    finally { if (pending === controller) pending = undefined }
+  }
+
   return {
     subscribe: state.subscribe,
     restore: () => request(false),
     create: () => current.status === 'idle' ? request(false, true) : request(true),
+    reopen,
+    confirmReopen,
     cancel() {
-      if (destroyed || !pending) return
-      pending.abort()
+      const controller = pending ?? reopening?.controller
+      if (destroyed || !controller) return
+      controller.abort()
       pending = undefined
-      setState({ ...current, status: 'cancelled', message: 'Request cancelled. Any returned passkey is kept. Refresh to check your wallets before trying again.' })
+      reopening = undefined
+      setState({ ...current, status: 'cancelled', openedWalletId: null, message: ['opening', 'awaiting-passkey', 'verifying'].includes(current.status)
+        ? 'Wallet recovery cancelled. Refresh or try again with your existing passkey.'
+        : 'Request cancelled. Any returned passkey is kept. Refresh to check your wallets before trying again.' })
     },
     destroy() {
       destroyed = true
       pending?.abort()
+      reopening?.controller.abort()
+      reopening = undefined
     },
   }
 }

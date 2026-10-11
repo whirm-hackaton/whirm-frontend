@@ -44,6 +44,34 @@ async function confirm(wallet: ReturnType<typeof createWallet>) {
   assert.equal(get(wallet).status, 'confirming')
 }
 
+test('reads one current-user wallet, treats GET 404 as absence, and never treats PUT 404 as success', async (context) => {
+  const f = fixture()
+  const fetch = context.mock.method(globalThis, 'fetch', async (url: string | URL | Request, options?: RequestInit) => {
+    assert.ok(String(url).endsWith('/wallet'))
+    assert.equal(options?.method, 'GET')
+    return Response.json({ wallet: metadata })
+  })
+  const wallet = createWallet(userId, noSessionExpiry, f.deps)
+  await wallet.restore()
+  assert.deepEqual(get(wallet).wallets, [metadata])
+  fetch.mock.mockImplementation(async () => new Response(null, { status: 404 }))
+  await wallet.restore()
+  assert.equal(get(wallet).status, 'idle')
+  assert.deepEqual(get(wallet).wallets, [])
+  await wallet.create()
+  assert.equal(get(wallet).status, 'confirming')
+  await wallet.create()
+  assert.equal(get(wallet).status, 'error')
+  assert.deepEqual(get(wallet).draft, credential)
+  assert.equal(fetch.mock.calls.at(-1)?.arguments[1]?.method, 'PUT')
+  for (const body of [{ wallets: [metadata] }, { wallet: null }]) {
+    fetch.mock.mockImplementation(async () => Response.json(body))
+    await wallet.restore()
+    assert.equal(get(wallet).status, 'error')
+  }
+  wallet.destroy()
+})
+
 test('refresh before registration, address-only payload, candidate response and cross-tab receipt reuse', async (context) => {
   const f = fixture()
   const fetch = context.mock.method(globalThis, 'fetch', async (url: string | URL | Request, options?: RequestInit) => {

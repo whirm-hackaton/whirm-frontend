@@ -1,8 +1,9 @@
-import { createPublicClient, http, type Address, type Hex } from 'viem'
+import { bytesToHex, createPublicClient, http, type Address, type Hex } from 'viem'
 import { createWebAuthnCredential, toCoinbaseSmartAccount, toWebAuthnAccount } from 'viem/account-abstraction'
 import { baseSepolia } from 'viem/chains'
 import { p256 } from '@noble/curves/p256'
 import { env } from '../env.js'
+import { validateWalletAssertion } from './assertion.js'
 
 export const factoryAddress = '0xba5ed110efdba3d005bfc882d75358acbbb85842'
 export type PasskeyCredential = {
@@ -21,6 +22,7 @@ export type PreparedPasskey = { address: Address; passkey: PasskeyMetadata }
 export function passkeyContext() {
   const origin = new URL(env.WALLET_ORIGIN)
   if (origin.origin !== env.WALLET_ORIGIN || origin.origin !== window.location.origin
+    || window.self !== window.top
     || !window.isSecureContext || (origin.protocol !== 'https:' && origin.hostname !== 'localhost')
     || env.WALLET_RP_ID !== origin.hostname) {
     throw new Error('Open the configured secure wallet origin. The wallet RP ID must match its hostname.')
@@ -74,17 +76,59 @@ export async function toPasskeyAccount(passkey: PasskeyMetadata, signal?: AbortS
     owners: [toWebAuthnAccount({
       credential: { id: passkey.credentialId, publicKey: passkey.publicKey },
       rpId: passkey.rpId,
-      getFn: (options) => navigator.credentials.get({ ...options, signal } as CredentialRequestOptions),
+      getFn: async (options) => {
+        const request = { ...options, signal } as CredentialRequestOptions
+        if (!request.publicKey) throw new Error('The wallet signature request is invalid.')
+        const credential = await navigator.credentials.get(request)
+        await validateWalletAssertion(credential, request.publicKey.challenge, passkey)
+        return credential
+      },
     })],
     version: passkey.accountVersion,
     nonce: BigInt(passkey.accountNonce),
   })
 }
 
-export async function preparePasskeyAccount(credential: PasskeyCredential): Promise<PreparedPasskey> {
+export async function preparePasskeyAccount(credential: PasskeyCredential, signal?: AbortSignal): Promise<PreparedPasskey> {
   const passkey: PasskeyMetadata = { credentialId: credential.credentialId, publicKey: credential.publicKey, rpId: credential.rpId, origin: credential.origin, accountVersion: '1.1', accountNonce: '0', factoryAddress }
-  const account = await toPasskeyAccount(passkey)
+  signal?.throwIfAborted()
+  const account = await toPasskeyAccount(passkey, signal)
+  signal?.throwIfAborted()
   return { address: account.address.toLowerCase() as Address, passkey }
+}
+
+export async function recoverPasskeyAccount(address: string, signal: AbortSignal): Promise<PreparedPasskey> {
+  const context = passkeyContext()
+  signal.throwIfAborted()
+  const challenge = crypto.getRandomValues(new Uint8Array(32))
+  // Omit allowCredentials so a fresh browser can discover the existing resident passkey.
+  const credential = await navigator.credentials.get({
+    publicKey: { challenge, rpId: context.rpId, userVerification: 'required', timeout: 60_000 }, signal,
+  })
+  signal.throwIfAborted()
+  if (!credential) throw new DOMException('No existing passkey was selected.', 'NotAllowedError')
+  await validateWalletAssertion(credential, challenge, { ...context, credentialId: credential.id })
+  const response = (credential as PublicKeyCredential).response as AuthenticatorAssertionResponse
+  if (!(response.signature instanceof ArrayBuffer)) throw new Error('The selected passkey returned an invalid P-256 signature.')
+  const clientHash = new Uint8Array(await crypto.subtle.digest('SHA-256', response.clientDataJSON))
+  const signedData = new Uint8Array(response.authenticatorData.byteLength + clientHash.length)
+  signedData.set(new Uint8Array(response.authenticatorData))
+  signedData.set(clientHash, response.authenticatorData.byteLength)
+  const hash = new Uint8Array(await crypto.subtle.digest('SHA-256', signedData))
+  const signature = p256.Signature.fromDER(new Uint8Array(response.signature))
+  // An assertion omits the public key; the registered smart-account address selects the recovered key.
+  for (let recovery = 0; recovery < 4; recovery++) {
+    signal.throwIfAborted()
+    let publicKey: Uint8Array
+    try { publicKey = signature.addRecoveryBit(recovery).recoverPublicKey(hash).toRawBytes(false) }
+    catch { continue }
+    if (!p256.verify(signature, hash, publicKey, { lowS: false, prehash: false })) continue
+    const recovered = { ...context, credentialId: credential.id, publicKey: bytesToHex(publicKey.slice(1)) }
+    if (!isPasskeyCredential(recovered)) throw new Error('The selected passkey returned invalid public settings.')
+    const account = await preparePasskeyAccount(recovered, signal)
+    if (account.address === address.toLowerCase()) return account
+  }
+  throw new Error('The selected passkey does not match your saved wallet. Choose the original passkey from the same Bitwarden vault. No replacement wallet was created.')
 }
 
 export function passkeyRequestRejected(error: unknown) {

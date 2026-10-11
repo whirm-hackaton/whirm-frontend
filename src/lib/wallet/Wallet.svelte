@@ -6,7 +6,7 @@
   let { userId, onSessionExpired }: { userId: string; onSessionExpired: () => void } = $props()
   const wallet = untrack(() => createWallet(userId, onSessionExpired))
   let heading = $state<HTMLHeadingElement>()
-  const busy = $derived($wallet.status === 'creating' || $wallet.status === 'loading')
+  const busy = $derived(['creating', 'loading', 'opening', 'verifying'].includes($wallet.status))
 
   $effect(() => {
     if (!busy) heading?.focus()
@@ -20,14 +20,14 @@
   <ol aria-label="Wallet setup progress" class="flex flex-wrap gap-x-4 gap-y-2 text-sm text-muted-foreground">
     <li>1. Signed in</li>
     <li aria-current={!$wallet.wallets.length ? 'step' : undefined}>2. Prepare your vault</li>
-    <li aria-current={$wallet.wallets.length ? 'step' : undefined}>3. Create your wallet</li>
+    <li aria-current={$wallet.wallets.length ? 'step' : undefined}>3. Create or recover your wallet</li>
   </ol>
 
   <h1 id="wallet-title" tabindex="-1" bind:this={heading} class="text-4xl leading-tight outline-none sm:text-5xl">
     {$wallet.wallets.length ? 'Your wallet' : 'Create your wallet with a passkey'}
   </h1>
   <p class="rounded-lg border bg-accent p-4 text-sm text-accent-foreground">
-    The smart account address is calculated on Base Sepolia. Creating a passkey does not deploy the account or verify your bank association. Use testnet funds only after deployment and proof have been confirmed.
+    The smart account address is calculated on Base Sepolia. Creating a passkey does not deploy the account or verify your bank association. Spending requires a fresh passkey signature validated on-chain.
   </p>
 
   {#if !$wallet.wallets.length}
@@ -44,11 +44,16 @@
 
   <div aria-live="polite" aria-atomic="true">
     {#if busy}
-      <p role="status" class="rounded-lg border bg-secondary p-4">{$wallet.status === 'creating' ? 'Preparing and saving your passkey wallet…' : 'Loading your saved wallets…'}</p>
+      <p role="status" class="rounded-lg border bg-secondary p-4">{$wallet.status === 'creating' ? 'Preparing and saving your passkey wallet…'
+        : $wallet.status === 'opening' ? 'Loading your registered wallet…'
+          : $wallet.status === 'verifying' ? 'Using your existing passkey and matching your wallet address…'
+            : 'Loading your saved wallets…'}</p>
     {:else if $wallet.message}
       <p role={$wallet.status === 'error' ? 'alert' : 'status'} class="rounded-lg border bg-secondary p-4">{$wallet.message}</p>
     {:else if $wallet.status === 'confirming'}
       <p class="text-lg text-muted-foreground">Your account has no saved wallet. Continue below and choose Bitwarden to save your passkey.</p>
+    {:else if $wallet.status === 'awaiting-passkey'}
+      <p class="rounded-lg border bg-secondary p-4">Your existing wallet is ready. Unlock and sync the same personal Bitwarden vault configured with https://vault.whirm.dev, then use your saved passkey below. This uses the existing passkey to recover your wallet, with no transaction or spending authorization.</p>
     {:else if $wallet.status === 'idle'}
       <p class="text-lg text-muted-foreground">No wallet is registered for your account yet.</p>
     {/if}
@@ -58,6 +63,7 @@
     <div class="rounded-2xl border bg-card p-6 shadow-sm">
       <p class="mb-2 text-sm text-muted-foreground">Calculated address. Deployment has not been checked.</p>
       <p class="mb-5 font-semibold">{metadata.status === 'verified' ? 'Verified association' : 'Unverified association'}</p>
+      <p class="mb-5 text-sm">{$wallet.openedWalletId === metadata.id ? 'Existing passkey recovered; wallet address matches. This does not verify your bank association or authorize spending.' : 'Use your existing passkey to reopen this wallet. Displaying its address alone does not prove control or authorize spending.'}</p>
       <dl class="space-y-4">
         <div>
           <dt class="text-sm text-muted-foreground">Address</dt>
@@ -80,6 +86,7 @@
           <dd>{metadata.verifiedAt ?? 'Not verified'}</dd>
         </div>
       </dl>
+      <Button class="mt-6" size="lg" disabled={busy || $wallet.status === 'awaiting-passkey'} onclick={() => wallet.reopen(metadata.id)}>Recover my wallet</Button>
     </div>
   {/each}
 
@@ -93,8 +100,11 @@
         {$wallet.status === 'confirming' ? $wallet.draft ? 'Continue with saved passkey' : 'Save my passkey in Bitwarden' : $wallet.draft ? 'Resume wallet creation' : 'Create my wallet'}
       </Button>
     {/if}
+    {#if $wallet.status === 'awaiting-passkey'}
+      <Button size="lg" onclick={() => wallet.confirmReopen()}>Use my existing passkey</Button>
+    {/if}
     <Button variant="outline" size="lg" disabled={busy} onclick={() => wallet.restore()}>Refresh wallets</Button>
-    {#if $wallet.status === 'creating'}
+    {#if ['creating', 'opening', 'awaiting-passkey', 'verifying'].includes($wallet.status)}
       <Button variant="outline" size="lg" onclick={() => wallet.cancel()}>Cancel request</Button>
     {/if}
   </div>

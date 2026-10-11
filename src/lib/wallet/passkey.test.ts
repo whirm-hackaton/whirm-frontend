@@ -33,7 +33,7 @@ test('validates P256 point and fixed reconstruction parameters/context', () => {
 
 test('uses configured secure origin, same-RP context, one owner and fixed factory nonce', async (context) => {
   const windowDescriptor = Object.getOwnPropertyDescriptor(globalThis, 'window')
-  const browserWindow = { location: { origin: credential.origin }, isSecureContext: true, PublicKeyCredential: class {} }
+  const browserWindow = { location: { origin: credential.origin }, isSecureContext: true, PublicKeyCredential: class {}, self: undefined as object | undefined, top: undefined as object | undefined }
   Object.defineProperty(globalThis, 'window', { configurable: true, value: browserWindow })
   // Node has no browser credential container; no assertion is requested during preparation.
   const navigatorDescriptor = Object.getOwnPropertyDescriptor(globalThis, 'navigator')
@@ -52,6 +52,10 @@ test('uses configured secure origin, same-RP context, one owner and fixed factor
     const prepared = await preparePasskeyAccount(credential)
     assert.deepEqual(prepared, { address: expected, passkey: metadata })
     assert.equal(fetch.mock.callCount(), 1)
+    browserWindow.self = {}
+    browserWindow.top = {}
+    assert.throws(passkeyContext, /configured secure wallet origin/)
+    browserWindow.top = browserWindow.self
     browserWindow.location.origin = 'http://wrong.test'
     assert.throws(passkeyContext, /configured secure wallet origin/)
   } finally {

@@ -1,5 +1,7 @@
 # Passkey wallet creation (HS-41)
 
+For reopening on the same or a new device, see [Recover the same wallet (HS-42)](passkey-reopening.md). Recovery uses a discoverable assertion and recovers the public key on the frontend; GET /wallet supplies only the registered address and chain.
+
 The frontend prepares a Coinbase Smart Account on Base Sepolia with one P-256 WebAuthn owner. The browser or operating system chooses the credential provider; the user must select Bitwarden. The application cannot assert which provider was used.
 
 **PoC contract:** the frontend creates the passkey and keeps the public settings needed by the SDK on the client. `PUT /wallet` receives only address and chain ID, as specified by HS-34/HS-41. The API records a candidate; backend ownership verification is outside the PoC. HS-38 validates the real Bitwarden journey; fixtures do not prove provider selection, vault synchronization or account deployment.
